@@ -1,2 +1,0 @@
-:HL["/_next/static/chunks/7ae767ad4ac17984.css","style"]
-0:{"buildId":"dsx_zB4erO6is8M-4czQv","tree":{"name":"","paramType":null,"paramKey":"","hasRuntimePrefetch":false,"slots":{"children":{"name":"__PAGE__","paramType":null,"paramKey":"__PAGE__","hasRuntimePrefetch":false,"slots":null,"isRootLayout":false}},"isRootLayout":true},"staleTime":300}
