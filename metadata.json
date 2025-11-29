@@ -1,0 +1,7 @@
+{
+  "name": "PECS Creator",
+  "description": "Create custom Picture Exchange Communication System (PECS) boards using AI-generated symbols or your own photos. Supports printing and cloud saving.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

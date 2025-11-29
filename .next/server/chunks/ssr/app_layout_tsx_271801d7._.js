@@ -1,0 +1,3 @@
+module.exports=[33290,a=>{"use strict";var b=a.i(7997);function c({children:a}){return(0,b.jsxs)("html",{lang:"en",children:[(0,b.jsx)("head",{}),(0,b.jsx)("body",{className:"font-sans antialiased bg-gray-50",children:a})]})}a.s(["default",()=>c,"metadata",0,{title:"Gemini PECS Creator",description:"Create custom Picture Exchange Communication System (PECS) boards."}])}];
+
+//# sourceMappingURL=app_layout_tsx_271801d7._.js.map
