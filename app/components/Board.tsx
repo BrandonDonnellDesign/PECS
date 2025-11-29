@@ -157,6 +157,15 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
                   ))}
                 </div>
               </div>
+
+              <div className="space-y-2 flex items-end">
+                <button
+                  onClick={() => import('../utils').then(u => u.exportBoard(board))}
+                  className="w-full py-2 px-4 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex items-center justify-center gap-2 font-medium"
+                >
+                  <Settings2 className="w-4 h-4" /> Export Board JSON
+                </button>
+              </div>
             </div>
           )}
         </div>

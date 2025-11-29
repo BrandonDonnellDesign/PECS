@@ -8,7 +8,7 @@ import Auth from './components/Auth';
 import ThemeToggle from './components/ThemeToggle';
 import { authService, storageService } from './services/supabase';
 import { generateUUID } from './utils';
-import { LayoutGrid, Printer, Plus, Home as HomeIcon, Sparkles, LogOut, User as UserIcon, Loader2, Trash2, ArrowLeft } from 'lucide-react';
+import { LayoutGrid, Printer, Plus, Home as HomeIcon, Sparkles, LogOut, User as UserIcon, Loader2, Trash2, ArrowLeft, Upload } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 
 export default function Home() {
@@ -211,13 +211,51 @@ export default function Home() {
                 <p className="text-lg md:text-xl opacity-90 max-w-2xl mx-auto mb-8 font-light">
                   Design accessible communication tools instantly. Use your own photos or our camera tool. Now with customizable layouts and cloud saving.
                 </p>
-                <button
-                  onClick={createNewBoard}
-                  className="bg-white text-blue-600 px-8 py-3 rounded-full font-bold text-lg hover:bg-blue-50 transition-all hover:scale-105 shadow-lg flex items-center gap-2 mx-auto"
-                >
-                  <Plus className="w-5 h-5" />
-                  Create New Board
-                </button>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <button
+                    onClick={createNewBoard}
+                    className="bg-white text-blue-600 px-8 py-3 rounded-full font-bold text-lg hover:bg-blue-50 transition-all hover:scale-105 shadow-lg flex items-center gap-2"
+                  >
+                    <Plus className="w-5 h-5" />
+                    Create New Board
+                  </button>
+                  <label className="bg-blue-800/30 text-white px-8 py-3 rounded-full font-bold text-lg hover:bg-blue-800/50 transition-all hover:scale-105 shadow-lg flex items-center gap-2 cursor-pointer backdrop-blur-sm border border-white/20">
+                    <Upload className="w-5 h-5" />
+                    Import Board
+                    <input
+                      type="file"
+                      accept=".json"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+
+                        try {
+                          const text = await file.text();
+                          const data = JSON.parse(text);
+                          const { validateBoard, generateUUID } = await import('./utils');
+
+                          if (validateBoard(data)) {
+                            // Ensure ID is unique to avoid collisions
+                            data.id = generateUUID();
+                            data.title = `${data.title} (Imported)`;
+                            data.updatedAt = Date.now();
+
+                            await storageService.saveBoard(data, user?.id);
+                            await loadBoards(user?.id);
+                            alert('Board imported successfully!');
+                          } else {
+                            alert('Invalid board file.');
+                          }
+                        } catch (err) {
+                          console.error(err);
+                          alert('Failed to import board.');
+                        }
+                        e.target.value = ''; // Reset input
+                      }}
+                    />
+                  </label>
+                </div>
               </div>
             </div>
 
