@@ -99,14 +99,14 @@ const CardEditor: React.FC<CardEditorProps> = ({ card, userId, onSave, onCancel 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-0 sm:p-4 backdrop-blur-sm">
       <div className="bg-white dark:bg-gray-800 rounded-none sm:rounded-xl shadow-2xl w-full max-w-2xl h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto transition-colors duration-300 flex flex-col">
-        <div className="flex justify-between items-center p-4 sm:p-6 border-b dark:border-gray-700 shrink-0">
-          <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">{card ? 'Edit Card' : 'New PECS Card'}</h2>
+        <div className="flex justify-between items-center p-3 sm:p-6 border-b dark:border-gray-700 shrink-0">
+          <h2 className="text-lg sm:text-2xl font-bold text-gray-800 dark:text-white">{card ? 'Edit Card' : 'New PECS Card'}</h2>
           <button onClick={onCancel} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full text-gray-500 dark:text-gray-400">
             <X className="w-6 h-6" />
           </button>
         </div>
 
-        <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 overflow-y-auto flex-1">
+        <div className="p-3 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 overflow-y-auto flex-1">
           {/* Left Column: Image Source */}
           <div className="space-y-6">
             <div className="flex gap-2 p-1 bg-gray-100 dark:bg-gray-700 rounded-lg">
@@ -257,12 +257,12 @@ const CardEditor: React.FC<CardEditorProps> = ({ card, userId, onSave, onCancel 
           </div>
         </div>
 
-        <div className="p-4 sm:p-6 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 sm:rounded-b-xl flex justify-end gap-3 shrink-0">
-          <button onClick={onCancel} className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">Cancel</button>
+        <div className="p-3 sm:p-6 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 sm:rounded-b-xl flex justify-end gap-3 shrink-0">
+          <button onClick={onCancel} className="px-3 py-2 text-sm sm:text-base text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">Cancel</button>
           <button
             onClick={handleSave}
             disabled={!imageUrl || !label}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 text-sm sm:text-base bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Save Card
           </button>

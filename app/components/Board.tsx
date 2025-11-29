@@ -81,17 +81,17 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
     <div className="w-full h-full flex flex-col">
       {!readOnly && (
         <div className="mb-6 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border dark:border-gray-700 space-y-4 transition-colors duration-300">
-          <div className="flex justify-between items-center">
-            <div>
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+            <div className="w-full sm:w-auto">
               <input
-                className="text-2xl font-bold text-gray-800 dark:text-white border-b-2 border-transparent focus:border-blue-500 outline-none bg-transparent"
+                className="w-full sm:w-auto text-2xl font-bold text-gray-800 dark:text-white border-b-2 border-transparent focus:border-blue-500 outline-none bg-transparent"
                 value={board.title}
                 onChange={(e) => updateBoardSettings({ title: e.target.value })}
               />
               <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{board.cards.length} Cards</p>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex gap-3 w-full sm:w-auto">
               <button
                 onClick={() => setShowSettings(!showSettings)}
                 className={`p-2 rounded-lg transition-colors ${showSettings ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
@@ -100,7 +100,7 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
               </button>
               <button
                 onClick={() => setIsCreatorOpen(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-medium"
+                className="flex-1 sm:flex-none justify-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-medium"
               >
                 <Plus className="w-5 h-5" />
                 Add Card
