@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Gemini PECS Creator",
+  title: "PECS Creator",
   description: "Create custom Picture Exchange Communication System (PECS) boards.",
 };
 

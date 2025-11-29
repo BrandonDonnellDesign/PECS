@@ -10,6 +10,13 @@
   --background-end-rgb: 255, 255, 255;
 }
 
+.dark {
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 17, 24, 39;
+  /* gray-900 */
+  --background-end-rgb: 0, 0, 0;
+}
+
 body {
   color: rgb(var(--foreground-rgb));
   background: linear-gradient(to bottom,
@@ -32,6 +39,17 @@ body {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+.board-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 640px) {
+  .board-grid {
+    grid-template-columns: repeat(var(--board-cols, 4), minmax(0, 1fr));
   }
 }
 

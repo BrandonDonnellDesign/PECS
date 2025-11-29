@@ -17,7 +17,7 @@ if (supabaseUrl && supabaseKey) {
   }
 }
 
-const LOCAL_STORAGE_KEY = 'gemini_pecs_boards';
+const LOCAL_STORAGE_KEY = 'pecs_creator_boards';
 
 export const authService = {
   getUser: async (): Promise<User | null> => {
@@ -25,7 +25,7 @@ export const authService = {
     const { data: { user } } = await supabase.auth.getUser();
     return user;
   },
-  
+
   signIn: async (email: string, password: string) => {
     if (!supabase) throw new Error("Supabase not configured");
     return supabase.auth.signInWithPassword({ email, password });
@@ -50,11 +50,11 @@ export const storageService = {
         .select('*')
         .eq('user_id', userId) // Assuming RLS policies or user_id column
         .order('updatedAt', { ascending: false });
-      
+
       // Fallback if table doesn't exist or error, try local
       if (!error && data) return data as unknown as PecsBoard[];
     }
-    
+
     // Local Fallback
     const local = localStorage.getItem(LOCAL_STORAGE_KEY);
     return local ? JSON.parse(local) : [];
@@ -67,11 +67,11 @@ export const storageService = {
         ...board,
         user_id: userId // Ensure ownership
       };
-      
+
       const { error } = await supabase.from('boards').upsert(dbBoard);
       if (error) console.error("Supabase save error:", error);
     }
-    
+
     // Always save local as backup/cache
     const boards = await storageService.getBoards(); // Note: this gets mixed boards if not carefully handled, but fine for fallback
     const existingIndex = boards.findIndex(b => b.id === board.id);
@@ -97,8 +97,8 @@ export const storageService = {
       const fileName = `${userId}/${Date.now()}-${file.name}`;
       const { data, error } = await supabase.storage.from('pecs-images').upload(fileName, file);
       if (data && !error) {
-         const { data: { publicUrl } } = supabase.storage.from('pecs-images').getPublicUrl(fileName);
-         return publicUrl;
+        const { data: { publicUrl } } = supabase.storage.from('pecs-images').getPublicUrl(fileName);
+        return publicUrl;
       }
     }
     // Local fallback: convert to base64
