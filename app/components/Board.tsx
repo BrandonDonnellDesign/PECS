@@ -146,15 +146,25 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
                   <Palette className="w-4 h-4" /> Board Background
                 </label>
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 flex-wrap items-center">
                   {['#f3f4f6', '#ffffff', '#fff1f2', '#f0f9ff', '#f0fdf4', '#faf5ff', '#1f2937'].map(color => (
                     <button
                       key={color}
                       onClick={() => updateBoardSettings({ backgroundColor: color })}
-                      className={`w-8 h-8 rounded-full border shadow-sm ${board.backgroundColor === color ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}
+                      className={`w-10 h-10 rounded-full border-2 border-gray-300 dark:border-gray-600 shadow-sm hover:scale-110 transition-transform ${board.backgroundColor === color ? 'ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-gray-800' : ''}`}
                       style={{ backgroundColor: color }}
+                      title={color}
                     />
                   ))}
+                  <div className="relative">
+                    <input
+                      type="color"
+                      value={board.backgroundColor || '#ffffff'}
+                      onChange={(e) => updateBoardSettings({ backgroundColor: e.target.value })}
+                      className="w-10 h-10 rounded-full border-2 border-gray-300 dark:border-gray-600 shadow-sm cursor-pointer hover:scale-110 transition-transform"
+                      title="Custom color"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -191,6 +201,7 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
             className={`
               relative aspect-square border-4 rounded-xl overflow-hidden flex flex-col shadow-sm transition-transform hover:shadow-md bg-white
               ${readOnly ? '' : 'cursor-grab active:cursor-grabbing'}
+              break-inside-avoid
             `}
             style={{ borderColor: card.backgroundColor }}
           >
