@@ -24,9 +24,15 @@
 
 ### 3. **Text-to-Speech (TTS)** 🔊
 - **Click to Speak**: Click on any card image to hear the label spoken aloud
-- **Visual Feedback**: Volume icon appears on hover
+- **Natural Voices**: Automatically selects the best quality voice available
+  - Prioritizes: Google > Microsoft Natural > Apple > Default
+  - Optimized speech rate (0.85x) for clarity
+- **Visual Feedback**: 
+  - Volume icon appears on hover
+  - Blue pulse animation when speaking
 - **Accessibility**: Helps with learning and pronunciation
 - **Browser-based**: Uses built-in Web Speech API (no internet required)
+- **Smart Voice Selection**: Automatically picks the most natural-sounding voice
 
 ### 4. **Emoji Support** 😊
 - **Emoji Picker**: New "Emoji" tab in card editor
@@ -90,7 +96,9 @@
 ### Use Text-to-Speech
 1. Open any board in editor mode
 2. Click on a card's image area
-3. Hear the label spoken aloud
+3. Hear the label spoken aloud with natural voice
+4. Watch for blue pulse animation while speaking
+5. Click again to repeat
 
 ### Add Emoji Cards
 1. Click "Add Card" in board editor
@@ -132,7 +140,11 @@ Boards are exported as JSON with this structure:
 ### Browser Compatibility
 - **Undo/Redo**: All modern browsers
 - **Export/Import**: All modern browsers
-- **TTS**: Chrome, Edge, Safari, Firefox (with varying voice quality)
+- **TTS**: All modern browsers with varying quality:
+  - **Chrome/Edge**: Excellent (Google voices)
+  - **Safari**: Very good (Apple voices)
+  - **Firefox**: Good (eSpeak voices)
+  - Best experience on Chrome/Edge
 - **Emoji**: All modern browsers
 
 ### Performance
@@ -142,8 +154,9 @@ Boards are exported as JSON with this structure:
 
 ## 🐛 Known Limitations
 
-- **TTS Voices**: Quality varies by browser and OS
-- **TTS Languages**: Default is English (US), can be customized
+- **TTS Voices**: Quality varies by browser and OS (best on Chrome/Edge)
+- **TTS Languages**: Currently optimized for English
+- **TTS Initialization**: May take 1-2 seconds on first page load
 - **History**: Cleared when switching boards or refreshing page
 - **Export**: Images embedded as data URLs (large file sizes possible)
 

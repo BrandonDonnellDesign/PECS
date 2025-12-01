@@ -175,9 +175,17 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
     storageService.saveBoard(updated, userId);
   };
 
+  const [speakingCardId, setSpeakingCardId] = useState<string | null>(null);
+
   const handleCardClick = (card: PecsCard) => {
     if (!readOnly) {
+      setSpeakingCardId(card.id);
       speakText(card.label);
+      
+      // Clear speaking state after a delay
+      setTimeout(() => {
+        setSpeakingCardId(null);
+      }, 1500);
     }
   };
 
@@ -401,8 +409,16 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
             >
               <img src={card.imageUrl} alt={card.label} className="max-h-full max-w-full object-contain pointer-events-none" />
               {/* TTS indicator */}
-              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/10 pointer-events-none">
-                <Volume2 className="w-8 h-8 text-blue-600 drop-shadow-lg" />
+              <div className={`absolute inset-0 flex items-center justify-center transition-opacity pointer-events-none ${
+                speakingCardId === card.id 
+                  ? 'opacity-100 bg-blue-500/20' 
+                  : 'opacity-0 group-hover:opacity-100 bg-black/10'
+              }`}>
+                <Volume2 className={`w-8 h-8 drop-shadow-lg transition-all ${
+                  speakingCardId === card.id 
+                    ? 'text-blue-600 scale-110 animate-pulse' 
+                    : 'text-blue-600'
+                }`} />
               </div>
             </div>
 

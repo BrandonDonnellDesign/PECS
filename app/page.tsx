@@ -12,7 +12,7 @@ import { ToastContainer, ToastProps } from './components/Toast';
 import TemplateModal from './components/TemplateModal';
 import { createBoardFromTemplate, BoardTemplate } from './templates';
 import { authService, storageService } from './services/supabase';
-import { generateUUID, exportBoard, importBoard } from './utils';
+import { generateUUID, exportBoard, importBoard, initializeTTS } from './utils';
 import { LayoutGrid, Printer, Plus, Home as HomeIcon, Sparkles, LogOut, User as UserIcon, Loader2, Trash2, ArrowLeft, Upload, Users, RefreshCw, Search, Copy, Download, FileUp } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 
@@ -30,6 +30,7 @@ export default function Home() {
 
   useEffect(() => {
     checkUser();
+    initializeTTS(); // Initialize text-to-speech voices
   }, []);
 
   // Keyboard shortcuts
