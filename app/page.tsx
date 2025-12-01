@@ -232,7 +232,7 @@ export default function Home() {
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
                   <button
-                    onClick={createNewBoard}
+                    onClick={() => createNewBoard()}
                     className="bg-white text-blue-600 px-8 py-3 rounded-full font-bold text-lg hover:bg-blue-50 transition-all hover:scale-105 shadow-lg flex items-center gap-2"
                   >
                     <Plus className="w-5 h-5" />
@@ -293,7 +293,7 @@ export default function Home() {
                 <div className="text-center py-16 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800/50 text-gray-400 dark:text-gray-500">
                   <LayoutGrid className="w-12 h-12 mx-auto mb-3 opacity-20" />
                   <p className="text-lg">No boards yet.</p>
-                  <button onClick={createNewBoard} className="text-blue-600 dark:text-blue-400 hover:underline mt-2">Start creating now</button>
+                  <button onClick={() => createNewBoard()} className="text-blue-600 dark:text-blue-400 hover:underline mt-2">Start creating now</button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
