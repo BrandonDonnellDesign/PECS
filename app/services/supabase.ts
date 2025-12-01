@@ -1,6 +1,6 @@
 
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
-import { PecsBoard } from '../types';
+import { PecsBoard, FamilyGroup, FamilyMember, FamilyGroupWithMembers, Profile } from '../types';
 
 // NOTE: This setup assumes the user provides these environment variables.
 // If they are missing, the app falls back to LocalStorage to ensure functionality.
@@ -23,17 +23,91 @@ export const authService = {
   getUser: async (): Promise<User | null> => {
     if (!supabase) return null;
     const { data: { user } } = await supabase.auth.getUser();
+    
+    // Ensure profile exists
+    if (user) {
+      await authService.ensureProfile(user.id);
+    }
+    
     return user;
+  },
+
+  ensureProfile: async (userId: string): Promise<void> => {
+    if (!supabase) return;
+    
+    try {
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', userId)
+        .single();
+
+      if (!existingProfile) {
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData.user) {
+          await supabase
+            .from('profiles')
+            .insert({
+              id: userId,
+              email: userData.user.email,
+              display_name: userData.user.user_metadata?.display_name || userData.user.email?.split('@')[0]
+            });
+          console.log("Profile created for user:", userId);
+        }
+      }
+    } catch (error) {
+      console.error("Error ensuring profile:", error);
+    }
+  },
+
+  getProfile: async (userId: string): Promise<Profile | null> => {
+    if (!supabase) return null;
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+    
+    if (error || !data) return null;
+    
+    return {
+      id: data.id,
+      email: data.email,
+      displayName: data.display_name,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
+  },
+
+  updateProfile: async (userId: string, displayName: string): Promise<void> => {
+    if (!supabase) throw new Error("Supabase not configured");
+    await supabase
+      .from('profiles')
+      .update({ display_name: displayName })
+      .eq('id', userId);
   },
 
   signIn: async (email: string, password: string) => {
     if (!supabase) throw new Error("Supabase not configured");
-    return supabase.auth.signInWithPassword({ email, password });
+    const result = await supabase.auth.signInWithPassword({ email, password });
+    
+    // Ensure profile exists after sign in
+    if (result.data.user) {
+      await authService.ensureProfile(result.data.user.id);
+    }
+    
+    return result;
   },
 
-  signUp: async (email: string, password: string) => {
+  signUp: async (email: string, password: string, displayName?: string) => {
     if (!supabase) throw new Error("Supabase not configured");
-    return supabase.auth.signUp({ email, password });
+    return supabase.auth.signUp({ 
+      email, 
+      password,
+      options: {
+        data: { display_name: displayName }
+      }
+    });
   },
 
   signOut: async () => {
@@ -43,53 +117,157 @@ export const authService = {
 };
 
 export const storageService = {
-  getBoards: async (userId?: string): Promise<PecsBoard[]> => {
+  getBoards: async (userId?: string, includeFamily: boolean = true): Promise<PecsBoard[]> => {
     if (supabase && userId) {
-      const { data, error } = await supabase
-        .from('boards')
-        .select('*')
-        .eq('user_id', userId) // Assuming RLS policies or user_id column
-        .order('updatedAt', { ascending: false });
+      try {
+        // Get user's own boards
+        console.log("Fetching boards for user:", userId);
+        const { data: ownBoards, error: ownError } = await supabase
+          .from('boards')
+          .select('*')
+          .eq('user_id', userId)
+          .order('updatedAt', { ascending: false });
 
-      // Fallback if table doesn't exist or error, try local
-      if (!error && data) return data as unknown as PecsBoard[];
+        console.log("Query result:", { ownBoards, ownError, hasError: !!ownError, hasData: !!ownBoards });
+
+        if (ownError) {
+          console.error("Supabase getBoards error:", ownError);
+          console.error("Error type:", typeof ownError);
+          console.error("Error keys:", Object.keys(ownError));
+          console.error("Error string:", String(ownError));
+          console.error("Error JSON:", JSON.stringify(ownError, null, 2));
+          // Fall through to local storage
+        }
+
+        let allBoards = ownBoards || [];
+
+        // If including family boards, get those too
+        if (includeFamily) {
+          try {
+            // Get family groups the user belongs to
+            const { data: memberGroups } = await supabase
+              .from('family_members')
+              .select('family_group_id')
+              .eq('user_id', userId);
+
+            if (memberGroups && memberGroups.length > 0) {
+              const groupIds = memberGroups.map(m => m.family_group_id);
+              
+              // Get boards for those family groups
+              const { data: familyBoards } = await supabase
+                .from('boards')
+                .select('*')
+                .in('group_id', groupIds)
+                .order('updatedAt', { ascending: false });
+
+              if (familyBoards) {
+                // Merge family boards with own boards (avoid duplicates)
+                const ownBoardIds = new Set(allBoards.map(b => b.id));
+                const uniqueFamilyBoards = familyBoards.filter(b => !ownBoardIds.has(b.id));
+                allBoards = [...allBoards, ...uniqueFamilyBoards];
+              }
+            }
+          } catch (familyError) {
+            console.error("Error loading family boards:", familyError);
+            // Continue with just own boards
+          }
+        }
+
+        if (allBoards.length > 0) {
+          const boards = allBoards.map(board => ({
+            id: board.id,
+            userId: board.user_id,
+            familyGroupId: board.group_id,
+            title: board.title,
+            gridColumns: board.gridColumns || 4,
+            gridGap: board.gridGap || 16,
+            backgroundColor: board.backgroundColor || '#ffffff',
+            cards: board.cards || [],
+            updatedAt: board.updatedAt || Date.now()
+          }));
+          
+          console.log("Loaded boards from Supabase:", boards);
+          
+          // Also sync to local storage as cache
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(boards));
+          return boards;
+        }
+      } catch (err) {
+        console.error("Error fetching boards:", err);
+      }
     }
 
     // Local Fallback
-    const local = localStorage.getItem(LOCAL_STORAGE_KEY);
-    return local ? JSON.parse(local) : [];
+    if (typeof window !== 'undefined') {
+      const local = localStorage.getItem(LOCAL_STORAGE_KEY);
+      const boards = local ? JSON.parse(local) : [];
+      console.log("Loaded boards from localStorage:", boards);
+      return boards;
+    }
+    return [];
   },
 
   saveBoard: async (board: PecsBoard, userId?: string): Promise<void> => {
+    // Always save local first as backup/cache
+    if (typeof window !== 'undefined') {
+      const local = localStorage.getItem(LOCAL_STORAGE_KEY);
+      const boards = local ? JSON.parse(local) : [];
+      const existingIndex = boards.findIndex((b: PecsBoard) => b.id === board.id);
+      if (existingIndex >= 0) {
+        boards[existingIndex] = board;
+      } else {
+        boards.push(board);
+      }
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(boards));
+    }
+
+    // Then try to save to Supabase
     if (supabase && userId) {
-      // Create a copy for DB that matches potential schema columns
-      const dbBoard = {
-        ...board,
-        user_id: userId // Ensure ownership
-      };
+      try {
+        const dbBoard = {
+          id: board.id,
+          user_id: userId,
+          group_id: board.familyGroupId || null,
+          title: board.title,
+          gridColumns: board.gridColumns,
+          gridGap: board.gridGap,
+          backgroundColor: board.backgroundColor,
+          cards: board.cards,
+          updatedAt: Date.now()
+        };
 
-      const { error } = await supabase.from('boards').upsert(dbBoard);
-      if (error) console.error("Supabase save error:", error);
+        const { error } = await supabase.from('boards').upsert(dbBoard);
+        if (error) {
+          console.error("Supabase save error:", error);
+        } else {
+          console.log("Board saved successfully:", board.id);
+        }
+      } catch (err) {
+        console.error("Error saving board to Supabase:", err);
+      }
     }
-
-    // Always save local as backup/cache
-    const boards = await storageService.getBoards(); // Note: this gets mixed boards if not carefully handled, but fine for fallback
-    const existingIndex = boards.findIndex(b => b.id === board.id);
-    if (existingIndex >= 0) {
-      boards[existingIndex] = board;
-    } else {
-      boards.push(board);
-    }
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(boards));
   },
 
   deleteBoard: async (id: string): Promise<void> => {
-    if (supabase) {
-      await supabase.from('boards').delete().match({ id });
+    // Delete from local storage first
+    if (typeof window !== 'undefined') {
+      const local = localStorage.getItem(LOCAL_STORAGE_KEY);
+      const boards = local ? JSON.parse(local) : [];
+      const filtered = boards.filter((b: PecsBoard) => b.id !== id);
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(filtered));
     }
-    const boards = await storageService.getBoards();
-    const filtered = boards.filter(b => b.id !== id);
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(filtered));
+
+    // Then try to delete from Supabase
+    if (supabase) {
+      try {
+        const { error } = await supabase.from('boards').delete().match({ id });
+        if (error) {
+          console.error("Supabase delete error:", error);
+        }
+      } catch (err) {
+        console.error("Error deleting board from Supabase:", err);
+      }
+    }
   },
 
   uploadImage: async (file: File, userId?: string): Promise<string> => {
@@ -107,5 +285,303 @@ export const storageService = {
       reader.onloadend = () => resolve(reader.result as string);
       reader.readAsDataURL(file);
     });
+  }
+};
+
+export const familyService = {
+  createFamilyGroup: async (name: string, userId: string): Promise<FamilyGroup | null> => {
+    if (!supabase) {
+      console.error("Supabase not configured");
+      throw new Error("Supabase not configured");
+    }
+    
+    console.log("Creating family group:", { name, userId });
+    
+    try {
+      // First, check if tables exist
+      const { data: tablesCheck, error: tablesError } = await supabase
+        .from('profiles')
+        .select('id')
+        .limit(1);
+
+      if (tablesError) {
+        console.error("Tables don't exist or RLS is blocking:", tablesError);
+        alert("Database tables not found. Please apply the migration first. See CHECK_DATABASE.sql");
+        return null;
+      }
+
+      // Check if the user has a profile
+      const { data: existingProfile, error: profileCheckError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', userId)
+        .single();
+
+      console.log("Profile check:", { existingProfile, profileCheckError });
+
+      if (!existingProfile && profileCheckError?.code !== 'PGRST116') {
+        console.error("Error checking profile:", profileCheckError);
+      }
+
+      if (!existingProfile) {
+        console.log("Profile doesn't exist, creating...");
+        // Create profile if it doesn't exist
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData.user) {
+          const { data: newProfile, error: createProfileError } = await supabase
+            .from('profiles')
+            .insert({
+              id: userId,
+              email: userData.user.email,
+              display_name: userData.user.user_metadata?.display_name || userData.user.email?.split('@')[0]
+            })
+            .select()
+            .single();
+
+          if (createProfileError) {
+            console.error("Error creating profile:", createProfileError);
+            alert(`Failed to create profile: ${createProfileError.message}. Check console for details.`);
+            return null;
+          }
+          console.log("Profile created:", newProfile);
+        }
+      }
+
+      // Create the family group
+      console.log("Creating family group in database...");
+      const { data: groupData, error: groupError } = await supabase
+        .from('family_groups')
+        .insert({ name, created_by: userId })
+        .select()
+        .single();
+
+      if (groupError) {
+        console.error("Error creating family group:", groupError);
+        console.error("Error JSON:", JSON.stringify(groupError, null, 2));
+        alert(`Failed to create family group: ${groupError.message}. Check console for details.`);
+        return null;
+      }
+
+      if (!groupData) {
+        console.error("No data returned from family group creation");
+        return null;
+      }
+
+      console.log("Family group created:", groupData);
+
+      // Add creator as owner
+      console.log("Adding creator as owner...");
+      const { error: memberError } = await supabase
+        .from('family_members')
+        .insert({
+          family_group_id: groupData.id,
+          user_id: userId,
+          role: 'owner'
+        });
+
+      if (memberError) {
+        console.error("Error adding creator as owner:", memberError);
+        // Try to clean up the group
+        await supabase.from('family_groups').delete().eq('id', groupData.id);
+        alert(`Failed to add you as owner: ${memberError.message}`);
+        return null;
+      }
+
+      console.log("Family group created successfully!");
+      return {
+        id: groupData.id,
+        name: groupData.name,
+        createdBy: groupData.created_by,
+        createdAt: groupData.created_at,
+        updatedAt: groupData.updated_at
+      };
+    } catch (error) {
+      console.error("Exception creating family group:", error);
+      alert(`Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return null;
+    }
+  },
+
+  getFamilyGroups: async (userId: string): Promise<FamilyGroupWithMembers[]> => {
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from('family_groups')
+      .select(`
+        *,
+        family_members (
+          id,
+          family_group_id,
+          user_id,
+          role,
+          joined_at,
+          profiles (
+            id,
+            email,
+            display_name
+          )
+        )
+      `)
+      .eq('family_members.user_id', userId);
+
+    if (error || !data) return [];
+
+    return data.map(group => ({
+      id: group.id,
+      name: group.name,
+      createdBy: group.created_by,
+      createdAt: group.created_at,
+      updatedAt: group.updated_at,
+      members: group.family_members.map((member: any) => ({
+        id: member.id,
+        familyGroupId: member.family_group_id,
+        userId: member.user_id,
+        role: member.role,
+        joinedAt: member.joined_at,
+        profile: member.profiles ? {
+          id: member.profiles.id,
+          email: member.profiles.email,
+          displayName: member.profiles.display_name,
+          createdAt: '',
+          updatedAt: ''
+        } : undefined
+      }))
+    }));
+  },
+
+  getFamilyGroupMembers: async (familyGroupId: string): Promise<FamilyMember[]> => {
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from('family_members')
+      .select(`
+        *,
+        profiles (
+          id,
+          email,
+          display_name,
+          created_at,
+          updated_at
+        )
+      `)
+      .eq('family_group_id', familyGroupId);
+
+    if (error || !data) return [];
+
+    return data.map(member => ({
+      id: member.id,
+      familyGroupId: member.family_group_id,
+      userId: member.user_id,
+      role: member.role,
+      joinedAt: member.joined_at,
+      profile: member.profiles ? {
+        id: member.profiles.id,
+        email: member.profiles.email,
+        displayName: member.profiles.display_name,
+        createdAt: member.profiles.created_at,
+        updatedAt: member.profiles.updated_at
+      } : undefined
+    }));
+  },
+
+  addFamilyMember: async (familyGroupId: string, email: string, role: 'admin' | 'member' = 'member'): Promise<boolean> => {
+    if (!supabase) throw new Error("Supabase not configured");
+
+    try {
+      // First check if user exists in auth.users
+      const { data: authUser, error: authError } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .eq('email', email.toLowerCase().trim())
+        .single();
+
+      if (authError || !authUser) {
+        console.error("User not found:", email);
+        alert(`User with email "${email}" not found. They need to create an account first.`);
+        return false;
+      }
+
+      // Check if already a member
+      const { data: existingMember } = await supabase
+        .from('family_members')
+        .select('id')
+        .eq('family_group_id', familyGroupId)
+        .eq('user_id', authUser.id)
+        .single();
+
+      if (existingMember) {
+        alert(`${email} is already a member of this group.`);
+        return false;
+      }
+
+      // Add as member
+      const { error } = await supabase
+        .from('family_members')
+        .insert({
+          family_group_id: familyGroupId,
+          user_id: authUser.id,
+          role
+        });
+
+      if (error) {
+        console.error("Error adding family member:", error);
+        alert(`Failed to add member: ${error.message}`);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error("Exception adding family member:", error);
+      alert('An unexpected error occurred. Check console for details.');
+      return false;
+    }
+  },
+
+  removeFamilyMember: async (memberId: string): Promise<boolean> => {
+    if (!supabase) throw new Error("Supabase not configured");
+
+    const { error } = await supabase
+      .from('family_members')
+      .delete()
+      .eq('id', memberId);
+
+    if (error) {
+      console.error("Error removing family member:", error);
+      return false;
+    }
+
+    return true;
+  },
+
+  updateMemberRole: async (memberId: string, role: 'admin' | 'member'): Promise<boolean> => {
+    if (!supabase) throw new Error("Supabase not configured");
+
+    const { error } = await supabase
+      .from('family_members')
+      .update({ role })
+      .eq('id', memberId);
+
+    if (error) {
+      console.error("Error updating member role:", error);
+      return false;
+    }
+
+    return true;
+  },
+
+  deleteFamilyGroup: async (familyGroupId: string): Promise<boolean> => {
+    if (!supabase) throw new Error("Supabase not configured");
+
+    const { error } = await supabase
+      .from('family_groups')
+      .delete()
+      .eq('id', familyGroupId);
+
+    if (error) {
+      console.error("Error deleting family group:", error);
+      return false;
+    }
+
+    return true;
   }
 };

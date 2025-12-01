@@ -1,9 +1,9 @@
 
-import React, { useState } from 'react';
-import { PecsBoard, PecsCard } from '../types';
+import React, { useState, useEffect } from 'react';
+import { PecsBoard, PecsCard, FamilyGroup } from '../types';
 import CardEditor from './CardEditor';
-import { Plus, Trash2, Edit2, GripVertical, Settings2, Palette } from 'lucide-react';
-import { storageService } from '../services/supabase';
+import { Plus, Trash2, Edit2, GripVertical, Settings2, Palette, Users, Share2 } from 'lucide-react';
+import { storageService, familyService } from '../services/supabase';
 
 interface BoardProps {
   board: PecsBoard;
@@ -17,6 +17,46 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
   const [draggedCardIndex, setDraggedCardIndex] = useState<number | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [familyGroupName, setFamilyGroupName] = useState<string | null>(null);
+  const [familyGroups, setFamilyGroups] = useState<FamilyGroup[]>([]);
+  const [showShareMenu, setShowShareMenu] = useState(false);
+
+  useEffect(() => {
+    if (userId) {
+      loadFamilyGroups();
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showShareMenu) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.share-menu-container')) {
+          setShowShareMenu(false);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showShareMenu]);
+
+  useEffect(() => {
+    if (board.familyGroupId && familyGroups.length > 0) {
+      const group = familyGroups.find(g => g.id === board.familyGroupId);
+      setFamilyGroupName(group?.name || null);
+    }
+  }, [board.familyGroupId, familyGroups]);
+
+  const loadFamilyGroups = async () => {
+    if (!userId) return;
+    try {
+      const groups = await familyService.getFamilyGroups(userId);
+      setFamilyGroups(groups);
+    } catch (error) {
+      console.error('Error loading family groups:', error);
+    }
+  };
 
   const handleSaveCard = (newCard: PecsCard) => {
     let newCards = [...board.cards];
@@ -77,6 +117,20 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
     storageService.saveBoard(updated, userId);
   };
 
+  const handleShareWithGroup = async (groupId: string | null) => {
+    const updated = { ...board, familyGroupId: groupId, updatedAt: Date.now() };
+    onUpdate(updated);
+    await storageService.saveBoard(updated, userId);
+    setShowShareMenu(false);
+    
+    if (groupId) {
+      const group = familyGroups.find(g => g.id === groupId);
+      alert(`Board shared with ${group?.name}!`);
+    } else {
+      alert('Board is now private (unshared)');
+    }
+  };
+
   return (
     <div className="w-full h-full flex flex-col">
       {!readOnly && (
@@ -88,10 +142,62 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
                 value={board.title}
                 onChange={(e) => updateBoardSettings({ title: e.target.value })}
               />
-              <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{board.cards.length} Cards</p>
+              <div className="flex items-center gap-3 mt-1">
+                <p className="text-gray-500 dark:text-gray-400 text-sm">{board.cards.length} Cards</p>
+                {familyGroupName && (
+                  <>
+                    <span className="text-gray-300 dark:text-gray-600">•</span>
+                    <div className="flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400">
+                      <Users className="w-3 h-3" />
+                      <span>{familyGroupName}</span>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
 
             <div className="flex gap-3 w-full sm:w-auto">
+              <div className="relative share-menu-container">
+                <button
+                  onClick={() => setShowShareMenu(!showShareMenu)}
+                  className={`p-2 rounded-lg transition-colors ${showShareMenu ? 'bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                  title="Share with family group"
+                >
+                  <Share2 className="w-5 h-5" />
+                </button>
+                
+                {showShareMenu && (
+                  <div className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 p-2">
+                    <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 px-2">
+                      Share with Family Group
+                    </div>
+                    <div className="space-y-1">
+                      <button
+                        onClick={() => handleShareWithGroup(null)}
+                        className={`w-full text-left px-3 py-2 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-700 ${!board.familyGroupId ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'}`}
+                      >
+                        🔒 Private (Just Me)
+                      </button>
+                      {familyGroups.map(group => (
+                        <button
+                          key={group.id}
+                          onClick={() => handleShareWithGroup(group.id)}
+                          className={`w-full text-left px-3 py-2 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-700 ${board.familyGroupId === group.id ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}`}
+                        >
+                          <Users className="w-3 h-3 inline mr-2" />
+                          {group.name}
+                        </button>
+                      ))}
+                      {familyGroups.length === 0 && (
+                        <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 italic">
+                          No family groups yet
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
               <button
                 onClick={() => setShowSettings(!showSettings)}
                 className={`p-2 rounded-lg transition-colors ${showSettings ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}

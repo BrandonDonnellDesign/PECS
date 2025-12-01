@@ -6,9 +6,11 @@ import { PecsBoard, AppRoute } from './types';
 import Board from './components/Board';
 import Auth from './components/Auth';
 import ThemeToggle from './components/ThemeToggle';
+import FamilyGroups from './components/FamilyGroups';
+import UserDebug from './components/UserDebug';
 import { authService, storageService } from './services/supabase';
 import { generateUUID } from './utils';
-import { LayoutGrid, Printer, Plus, Home as HomeIcon, Sparkles, LogOut, User as UserIcon, Loader2, Trash2, ArrowLeft, Upload } from 'lucide-react';
+import { LayoutGrid, Printer, Plus, Home as HomeIcon, Sparkles, LogOut, User as UserIcon, Loader2, Trash2, ArrowLeft, Upload, Users } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 
 export default function Home() {
@@ -17,19 +19,11 @@ export default function Home() {
   const [activeBoardId, setActiveBoardId] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedFamilyGroup, setSelectedFamilyGroup] = useState<string | null>(null);
 
   useEffect(() => {
     checkUser();
   }, []);
-
-  useEffect(() => {
-    if (!loading) {
-      // This useEffect is now redundant if loadBoards is called directly in checkUser
-      // and handles its own loading state.
-      // Keeping it for now, but it might be removed in a future refactor.
-      // loadBoards(); // This call might be problematic if user is null initially
-    }
-  }, [user, loading]);
 
   // Auto-trigger print when entering print route
   useEffect(() => {
@@ -42,31 +36,42 @@ export default function Home() {
   }, [route, activeBoardId]);
 
   const checkUser = async () => {
-    const currentUser = await authService.getUser();
-    setUser(currentUser);
-    loadBoards(currentUser?.id); // Call loadBoards with the user ID
+    setLoading(true);
+    try {
+      const currentUser = await authService.getUser();
+      setUser(currentUser);
+      await loadBoards(currentUser?.id);
+    } catch (error) {
+      console.error("Error checking user:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const loadBoards = async (userId?: string) => {
-    setLoading(true);
-    const data = await storageService.getBoards(userId);
-    setBoards(data);
-    setLoading(false);
+    try {
+      const data = await storageService.getBoards(userId);
+      console.log("Loaded boards:", data);
+      setBoards(data);
+    } catch (error) {
+      console.error("Error loading boards:", error);
+      setBoards([]);
+    }
   };
 
   const handleLogout = async () => {
     await authService.signOut();
     setUser(null);
     setRoute(AppRoute.HOME);
-    setBoards([]); // Clear sensitive data
-    loadBoards(); // Reload local/guest boards if any
+    await loadBoards(); // Reload local/guest boards if any
   };
 
-  const createNewBoard = async () => {
+  const createNewBoard = async (familyGroupId?: string) => {
     const newBoard: PecsBoard = {
       id: generateUUID(),
       userId: user?.id,
-      title: "New Board",
+      familyGroupId: familyGroupId || null,
+      title: familyGroupId ? "New Family Board" : "New Board",
       gridColumns: 4,
       gridGap: 16,
       backgroundColor: '#ffffff',
@@ -74,7 +79,7 @@ export default function Home() {
       updatedAt: Date.now()
     };
     await storageService.saveBoard(newBoard, user?.id);
-    await loadBoards();
+    await loadBoards(user?.id);
     setActiveBoardId(newBoard.id);
     setRoute(AppRoute.EDITOR);
   };
@@ -93,7 +98,7 @@ export default function Home() {
     e.stopPropagation();
     if (confirm("Are you sure you want to delete this board?")) {
       await storageService.deleteBoard(id);
-      loadBoards();
+      await loadBoards(user?.id);
     }
   };
 
@@ -162,6 +167,20 @@ export default function Home() {
               >
                 <Printer className="w-4 h-4" />
                 Print Mode
+              </button>
+            )}
+
+            {user && route !== AppRoute.PRINT && (
+              <button
+                onClick={() => setRoute(route === AppRoute.FAMILY ? AppRoute.HOME : AppRoute.FAMILY)}
+                className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  route === AppRoute.FAMILY
+                    ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
+                    : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span className="hidden sm:inline">Family Groups</span>
               </button>
             )}
 
@@ -302,7 +321,15 @@ export default function Home() {
                         )}
                       </div>
                       <h3 className="font-bold text-lg text-gray-800 dark:text-white truncate pr-6">{board.title}</h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">{board.cards.length} cards • {board.gridColumns} cols</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{board.cards.length} cards • {board.gridColumns} cols</p>
+                        {board.familyGroupId && (
+                          <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
+                            <Users className="w-3 h-3" />
+                            <span>Shared</span>
+                          </div>
+                        )}
+                      </div>
 
                       <button
                         onClick={(e) => handleDeleteBoard(e, board.id)}
@@ -329,6 +356,12 @@ export default function Home() {
           </div>
         )}
 
+        {route === AppRoute.FAMILY && user && (
+          <div className="animate-fade-in">
+            <FamilyGroups onBoardCreate={(groupId) => createNewBoard(groupId)} />
+          </div>
+        )}
+
       </main>
 
       {/* Footer */}
@@ -340,6 +373,9 @@ export default function Home() {
           <p>Designed to assist in creating AAC materials for everyone.</p>
         </div>
       </footer>
+
+      {/* Debug Component - Remove after setup */}
+      {user && <UserDebug />}
     </div>
   );
 }

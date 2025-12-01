@@ -10,12 +10,42 @@ export interface PecsCard {
 export interface PecsBoard {
   id: string;
   userId?: string; // For auth
+  familyGroupId?: string; // For family sharing
   title: string;
   gridColumns: number;
   gridGap: number; // New: Spacing between cards
   backgroundColor: string; // New: Board background
   cards: PecsCard[];
   updatedAt: number;
+}
+
+export interface Profile {
+  id: string;
+  email: string;
+  displayName?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FamilyGroup {
+  id: string;
+  name: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FamilyMember {
+  id: string;
+  familyGroupId: string;
+  userId: string;
+  role: 'owner' | 'admin' | 'member';
+  joinedAt: string;
+  profile?: Profile;
+}
+
+export interface FamilyGroupWithMembers extends FamilyGroup {
+  members: FamilyMember[];
 }
 
 export interface GenerationConfig {
@@ -27,7 +57,8 @@ export enum AppRoute {
   HOME = 'home',
   EDITOR = 'editor',
   PRINT = 'print',
-  AUTH = 'auth'
+  AUTH = 'auth',
+  FAMILY = 'family'
 }
 
 export const CARD_COLORS = {
