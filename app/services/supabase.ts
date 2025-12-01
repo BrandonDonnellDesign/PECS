@@ -283,84 +283,31 @@ export const familyService = {
     }
     
     try {
-      // First, check if tables exist
-      const { data: tablesCheck, error: tablesError } = await supabase
-        .from('profiles')
-        .select('id')
-        .limit(1);
+      // Ensure profile exists
+      await authService.ensureProfile(userId);
 
-      if (tablesError) {
-        console.error("Tables don't exist or RLS is blocking:", tablesError);
-        alert("Database tables not found. Please apply the migration first. See CHECK_DATABASE.sql");
-        return null;
-      }
-
-      // Check if the user has a profile
-      const { data: existingProfile, error: profileCheckError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', userId)
-        .single();
-
-      if (!existingProfile && profileCheckError?.code !== 'PGRST116') {
-        console.error("Error checking profile:", profileCheckError);
-      }
-
-      if (!existingProfile) {
-        // Create profile if it doesn't exist
-        const { data: userData } = await supabase.auth.getUser();
-        if (userData.user) {
-          const { data: newProfile, error: createProfileError } = await supabase
-            .from('profiles')
-            .insert({
-              id: userId,
-              email: userData.user.email,
-              display_name: userData.user.user_metadata?.display_name || userData.user.email?.split('@')[0]
-            })
-            .select()
-            .single();
-
-          if (createProfileError) {
-            console.error("Error creating profile:", createProfileError);
-            alert(`Failed to create profile: ${createProfileError.message}. Check console for details.`);
-            return null;
-          }
-        }
-      }
-
-      // Create the family group
-      const { data: groupData, error: groupError } = await supabase
-        .from('family_groups')
-        .insert({ name, created_by: userId })
-        .select()
-        .single();
-
-      if (groupError) {
-        console.error("Error creating family group:", groupError);
-        console.error("Error JSON:", JSON.stringify(groupError, null, 2));
-        alert(`Failed to create family group: ${groupError.message}. Check console for details.`);
-        return null;
-      }
-
-      if (!groupData) {
-        console.error("No data returned from family group creation");
-        return null;
-      }
-
-      // Add creator as owner
-      const { error: memberError } = await supabase
-        .from('family_members')
-        .insert({
-          family_group_id: groupData.id,
-          user_id: userId,
-          role: 'owner'
+      // Use the helper function to create group with owner in one transaction
+      const { data: groupId, error: rpcError } = await supabase
+        .rpc('create_family_group_with_owner', {
+          group_name: name,
+          creator_id: userId
         });
 
-      if (memberError) {
-        console.error("Error adding creator as owner:", memberError);
-        // Try to clean up the group
-        await supabase.from('family_groups').delete().eq('id', groupData.id);
-        alert(`Failed to add you as owner: ${memberError.message}`);
+      if (rpcError) {
+        console.error("Error creating family group:", rpcError);
+        alert(`Failed to create family group: ${rpcError.message}`);
+        return null;
+      }
+
+      // Fetch the created group
+      const { data: groupData, error: fetchError } = await supabase
+        .from('family_groups')
+        .select('*')
+        .eq('id', groupId)
+        .single();
+
+      if (fetchError || !groupData) {
+        console.error("Error fetching created group:", fetchError);
         return null;
       }
 
@@ -505,100 +452,52 @@ export const familyService = {
     try {
       const cleanEmail = email.toLowerCase().trim();
       
-      // Use RPC or direct auth.users query to find user (bypassing RLS)
-      // Since we can't query auth.users directly, we'll try to add them and let the database handle it
-      
-      // First, try to find the user in profiles without RLS restrictions
-      // We'll use the service to create a temporary admin client
+      // Get current user
       const { data: { user: currentUser } } = await supabase.auth.getUser();
-      
       if (!currentUser) {
         alert('You must be logged in to add members.');
         return false;
       }
 
-      // Create a function call that uses security definer to bypass RLS
-      const { data: userData, error: userError } = await supabase.rpc('get_user_id_by_email', {
-        user_email: cleanEmail
-      });
-
-      // If RPC doesn't exist, fall back to direct insert attempt
-      if (userError && userError.code === '42883') {
-        // Function doesn't exist, try direct approach
-        // Get all profiles to find the user (this works if RLS is disabled on profiles)
-        const { data: allProfiles } = await supabase
-          .from('profiles')
-          .select('id, email');
+      // Find the user by email (profiles table allows SELECT for all authenticated users)
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .eq('email', cleanEmail)
+        .limit(1);
         
-        const targetProfile = allProfiles?.find(p => p.email?.toLowerCase() === cleanEmail);
-        
-        if (!targetProfile) {
-          alert(`User with email "${email}" not found. They need to create an account first.`);
-          return false;
-        }
-
-        // Check if already a member
-        const { data: existingMember } = await supabase
-          .from('family_members')
-          .select('id')
-          .eq('family_group_id', familyGroupId)
-          .eq('user_id', targetProfile.id)
-          .single();
-
-        if (existingMember) {
-          alert(`${email} is already a member of this group.`);
-          return false;
-        }
-
-        // Add as member
-        const { error } = await supabase
-          .from('family_members')
-          .insert({
-            family_group_id: familyGroupId,
-            user_id: targetProfile.id,
-            role
-          });
-
-        if (error) {
-          console.error("Error adding family member:", error);
-          alert(`Failed to add member: ${error.message}`);
-          return false;
-        }
-
-        return true;
-      }
-
-      if (userError || !userData) {
-        console.error("User not found:", cleanEmail, userError);
+      if (profileError || !profiles || profiles.length === 0) {
         alert(`User with email "${email}" not found. They need to create an account first.`);
         return false;
       }
+
+      const targetUserId = profiles[0].id;
 
       // Check if already a member
       const { data: existingMember } = await supabase
         .from('family_members')
         .select('id')
         .eq('family_group_id', familyGroupId)
-        .eq('user_id', userData)
-        .single();
+        .eq('user_id', targetUserId)
+        .maybeSingle();
 
       if (existingMember) {
         alert(`${email} is already a member of this group.`);
         return false;
       }
 
-      // Add as member
-      const { error } = await supabase
-        .from('family_members')
-        .insert({
-          family_group_id: familyGroupId,
-          user_id: userData,
-          role
+      // Use the helper function to add member with permission checking
+      const { data: memberId, error: addError } = await supabase
+        .rpc('add_family_member', {
+          p_family_group_id: familyGroupId,
+          p_user_id: targetUserId,
+          p_role: role,
+          p_added_by: currentUser.id
         });
 
-      if (error) {
-        console.error("Error adding family member:", error);
-        alert(`Failed to add member: ${error.message}`);
+      if (addError) {
+        console.error("Error adding family member:", addError);
+        alert(`Failed to add member: ${addError.message}`);
         return false;
       }
 
@@ -613,17 +512,31 @@ export const familyService = {
   removeFamilyMember: async (memberId: string): Promise<boolean> => {
     if (!supabase) throw new Error("Supabase not configured");
 
-    const { error } = await supabase
-      .from('family_members')
-      .delete()
-      .eq('id', memberId);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        alert('You must be logged in to remove members.');
+        return false;
+      }
 
-    if (error) {
-      console.error("Error removing family member:", error);
+      // Use the helper function with permission checking
+      const { data, error } = await supabase
+        .rpc('remove_family_member', {
+          p_member_id: memberId,
+          p_removed_by: user.id
+        });
+
+      if (error) {
+        console.error("Error removing family member:", error);
+        alert(`Failed to remove member: ${error.message}`);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error("Exception removing family member:", error);
       return false;
     }
-
-    return true;
   },
 
   updateMemberRole: async (memberId: string, role: 'admin' | 'member'): Promise<boolean> => {

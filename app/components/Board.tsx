@@ -1,9 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PecsBoard, PecsCard, FamilyGroup } from '../types';
 import CardEditor from './CardEditor';
-import { Plus, Trash2, Edit2, GripVertical, Settings2, Palette, Users, Share2 } from 'lucide-react';
+import { Plus, Trash2, Edit2, GripVertical, Settings2, Palette, Users, Share2, Undo2, Redo2, Volume2 } from 'lucide-react';
 import { storageService, familyService } from '../services/supabase';
+import { BoardHistory, speakText } from '../utils';
 
 interface BoardProps {
   board: PecsBoard;
@@ -20,12 +21,65 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
   const [familyGroupName, setFamilyGroupName] = useState<string | null>(null);
   const [familyGroups, setFamilyGroups] = useState<FamilyGroup[]>([]);
   const [showShareMenu, setShowShareMenu] = useState(false);
+  const historyRef = useRef(new BoardHistory());
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  // Initialize history when board loads
+  useEffect(() => {
+    historyRef.current.initialize(board);
+    updateHistoryState();
+  }, [board.id]);
 
   useEffect(() => {
     if (userId) {
       loadFamilyGroups();
     }
   }, [userId]);
+
+  // Keyboard shortcuts for undo/redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const updateHistoryState = () => {
+    setCanUndo(historyRef.current.canUndo());
+    setCanRedo(historyRef.current.canRedo());
+  };
+
+  const saveToHistory = (updatedBoard: PecsBoard) => {
+    historyRef.current.push(updatedBoard);
+    updateHistoryState();
+  };
+
+  const handleUndo = () => {
+    const previousBoard = historyRef.current.undo();
+    if (previousBoard) {
+      onUpdate(previousBoard);
+      storageService.saveBoard(previousBoard, userId);
+      updateHistoryState();
+    }
+  };
+
+  const handleRedo = () => {
+    const nextBoard = historyRef.current.redo();
+    if (nextBoard) {
+      onUpdate(nextBoard);
+      storageService.saveBoard(nextBoard, userId);
+      updateHistoryState();
+    }
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -67,6 +121,7 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
     }
 
     const updatedBoard = { ...board, cards: newCards, updatedAt: Date.now() };
+    saveToHistory(updatedBoard);
     onUpdate(updatedBoard);
     storageService.saveBoard(updatedBoard, userId);
 
@@ -81,6 +136,7 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
         cards: board.cards.filter(c => c.id !== id),
         updatedAt: Date.now()
       };
+      saveToHistory(updatedBoard);
       onUpdate(updatedBoard);
       storageService.saveBoard(updatedBoard, userId);
     }
@@ -106,6 +162,7 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
     newCards.splice(dropIndex, 0, draggedItem);
 
     const updatedBoard = { ...board, cards: newCards, updatedAt: Date.now() };
+    saveToHistory(updatedBoard);
     onUpdate(updatedBoard);
     storageService.saveBoard(updatedBoard, userId);
     setDraggedCardIndex(null);
@@ -113,8 +170,15 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
 
   const updateBoardSettings = (settings: Partial<PecsBoard>) => {
     const updated = { ...board, ...settings, updatedAt: Date.now() };
+    saveToHistory(updated);
     onUpdate(updated);
     storageService.saveBoard(updated, userId);
+  };
+
+  const handleCardClick = (card: PecsCard) => {
+    if (!readOnly) {
+      speakText(card.label);
+    }
   };
 
   const handleShareWithGroup = async (groupId: string | null) => {
@@ -196,6 +260,25 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
                     </div>
                   </div>
                 )}
+              </div>
+              
+              <div className="flex gap-2">
+                <button
+                  onClick={handleUndo}
+                  disabled={!canUndo}
+                  title="Undo (Ctrl+Z)"
+                  className="p-2 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                >
+                  <Undo2 className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={handleRedo}
+                  disabled={!canRedo}
+                  title="Redo (Ctrl+Y)"
+                  className="p-2 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                >
+                  <Redo2 className="w-5 h-5" />
+                </button>
               </div>
               
               <button
@@ -312,8 +395,15 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
             style={{ borderColor: card.backgroundColor }}
           >
             {/* Image Area */}
-            <div className="h-[75%] w-full flex items-center justify-center p-2 bg-white">
+            <div 
+              className="h-[75%] w-full flex items-center justify-center p-2 bg-white cursor-pointer relative group"
+              onClick={() => handleCardClick(card)}
+            >
               <img src={card.imageUrl} alt={card.label} className="max-h-full max-w-full object-contain pointer-events-none" />
+              {/* TTS indicator */}
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/10 pointer-events-none">
+                <Volume2 className="w-8 h-8 text-blue-600 drop-shadow-lg" />
+              </div>
             </div>
 
             {/* Label Area */}

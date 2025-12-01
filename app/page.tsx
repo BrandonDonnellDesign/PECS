@@ -7,9 +7,13 @@ import Board from './components/Board';
 import Auth from './components/Auth';
 import ThemeToggle from './components/ThemeToggle';
 import FamilyGroups from './components/FamilyGroups';
+import ConfirmDialog from './components/ConfirmDialog';
+import { ToastContainer, ToastProps } from './components/Toast';
+import TemplateModal from './components/TemplateModal';
+import { createBoardFromTemplate, BoardTemplate } from './templates';
 import { authService, storageService } from './services/supabase';
-import { generateUUID } from './utils';
-import { LayoutGrid, Printer, Plus, Home as HomeIcon, Sparkles, LogOut, User as UserIcon, Loader2, Trash2, ArrowLeft, Upload, Users, RefreshCw } from 'lucide-react';
+import { generateUUID, exportBoard, importBoard } from './utils';
+import { LayoutGrid, Printer, Plus, Home as HomeIcon, Sparkles, LogOut, User as UserIcon, Loader2, Trash2, ArrowLeft, Upload, Users, RefreshCw, Search, Copy, Download, FileUp } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 
 export default function Home() {
@@ -19,43 +23,81 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedFamilyGroup, setSelectedFamilyGroup] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; boardId: string | null }>({ isOpen: false, boardId: null });
+  const [toasts, setToasts] = useState<ToastProps[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
 
   useEffect(() => {
     checkUser();
   }, []);
 
-  // Set up real-time subscription for boards
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // Ctrl/Cmd + N: New board
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault();
+        if (user && route === 'home') {
+          createNewBoard();
+        }
+      }
+      // Ctrl/Cmd + K: Focus search
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        document.getElementById('board-search')?.focus();
+      }
+      // Escape: Close modals
+      if (e.key === 'Escape') {
+        if (deleteConfirm.isOpen) {
+          setDeleteConfirm({ isOpen: false, boardId: null });
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [user, route, deleteConfirm.isOpen]);
+
+  // Set up real-time subscription and polling fallback
   useEffect(() => {
     if (!user) return;
 
+    // Polling fallback - refresh every 30 seconds
+    const pollInterval = setInterval(() => {
+      loadBoards(user.id);
+    }, 30000);
+
+    // Try to set up real-time subscription
     const { createClient } = require('@supabase/supabase-js');
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     
-    if (!supabaseUrl || !supabaseKey) return;
+    if (supabaseUrl && supabaseKey) {
+      const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
+      const channel = supabase
+        .channel('boards-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'boards'
+          },
+          () => {
+            loadBoards(user.id);
+          }
+        )
+        .subscribe();
 
-    // Subscribe to ALL board changes (we'll filter client-side)
-    const channel = supabase
-      .channel('boards-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'boards'
-        },
-        () => {
-          // Reload boards when changes occur
-          loadBoards(user.id);
-        }
-      )
-      .subscribe();
+      return () => {
+        clearInterval(pollInterval);
+        supabase.removeChannel(channel);
+      };
+    }
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => clearInterval(pollInterval);
   }, [user]);
 
   // Auto-trigger print when entering print route
@@ -99,21 +141,30 @@ export default function Home() {
   };
 
   const createNewBoard = async (familyGroupId?: string) => {
-    const newBoard: PecsBoard = {
-      id: generateUUID(),
-      userId: user?.id,
-      familyGroupId: familyGroupId || null,
-      title: familyGroupId ? "New Family Board" : "New Board",
-      gridColumns: 4,
-      gridGap: 16,
-      backgroundColor: '#ffffff',
-      cards: [],
-      updatedAt: Date.now()
-    };
+    setShowTemplateModal(true);
+  };
+
+  const handleTemplateSelect = async (template: BoardTemplate | null) => {
+    const newBoard: PecsBoard = template 
+      ? createBoardFromTemplate(template, user?.id)
+      : {
+          id: generateUUID(),
+          userId: user?.id,
+          familyGroupId: selectedFamilyGroup || null,
+          title: "New Board",
+          gridColumns: 4,
+          gridGap: 16,
+          backgroundColor: '#ffffff',
+          cards: [],
+          updatedAt: Date.now()
+        };
+    
     await storageService.saveBoard(newBoard, user?.id);
     await loadBoards(user?.id);
     setActiveBoardId(newBoard.id);
     setRoute(AppRoute.EDITOR);
+    setShowTemplateModal(false);
+    showToast(template ? `Created "${template.name}" board` : 'Board created successfully', 'success');
   };
 
   const openBoard = (id: string) => {
@@ -126,13 +177,75 @@ export default function Home() {
     // The Board component calls storageService, but we update local state for responsiveness
   };
 
-  const handleDeleteBoard = async (e: React.MouseEvent, id: string) => {
+  const handleDeleteBoard = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (confirm("Are you sure you want to delete this board?")) {
-      await storageService.deleteBoard(id);
-      await loadBoards(user?.id);
-    }
+    setDeleteConfirm({ isOpen: true, boardId: id });
   };
+
+  const showToast = (message: string, type: ToastProps['type']) => {
+    const id = Date.now().toString();
+    setToasts(prev => [...prev, { id, message, type, onClose: removeToast }]);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
+  const confirmDelete = async () => {
+    if (deleteConfirm.boardId) {
+      await storageService.deleteBoard(deleteConfirm.boardId);
+      await loadBoards(user?.id);
+      showToast('Board deleted successfully', 'success');
+    }
+    setDeleteConfirm({ isOpen: false, boardId: null });
+  };
+
+  const duplicateBoard = async (board: PecsBoard) => {
+    const duplicate: PecsBoard = {
+      ...board,
+      id: generateUUID(),
+      title: `${board.title} (Copy)`,
+      updatedAt: Date.now(),
+      cards: board.cards.map(card => ({
+        ...card,
+        id: generateUUID()
+      }))
+    };
+    await storageService.saveBoard(duplicate, user?.id);
+    await loadBoards(user?.id);
+    showToast('Board duplicated successfully', 'success');
+  };
+
+  const handleExportBoard = (e: React.MouseEvent, board: PecsBoard) => {
+    e.stopPropagation();
+    exportBoard(board);
+    showToast(`Exported "${board.title}"`, 'success');
+  };
+
+  const handleImportBoard = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        try {
+          const board = await importBoard(file);
+          board.userId = user?.id;
+          await storageService.saveBoard(board, user?.id);
+          await loadBoards(user?.id);
+          showToast(`Imported "${board.title}"`, 'success');
+        } catch (error) {
+          showToast('Failed to import board', 'error');
+        }
+      }
+    };
+    input.click();
+  };
+
+  const filteredBoards = boards.filter(board =>
+    board.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const handleManualPrint = () => {
     window.print();
@@ -270,68 +383,55 @@ export default function Home() {
                     <Plus className="w-5 h-5" />
                     Create New Board
                   </button>
-                  <label className="bg-blue-800/30 text-white px-8 py-3 rounded-full font-bold text-lg hover:bg-blue-800/50 transition-all hover:scale-105 shadow-lg flex items-center gap-2 cursor-pointer backdrop-blur-sm border border-white/20">
-                    <Upload className="w-5 h-5" />
+                  <button
+                    onClick={handleImportBoard}
+                    className="bg-blue-800/30 text-white px-8 py-3 rounded-full font-bold text-lg hover:bg-blue-800/50 transition-all hover:scale-105 shadow-lg flex items-center gap-2 backdrop-blur-sm border border-white/20"
+                  >
+                    <FileUp className="w-5 h-5" />
                     Import Board
-                    <input
-                      type="file"
-                      accept=".json"
-                      className="hidden"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-
-                        try {
-                          const text = await file.text();
-                          const data = JSON.parse(text);
-                          const { validateBoard, generateUUID } = await import('./utils');
-
-                          if (validateBoard(data)) {
-                            // Ensure ID is unique to avoid collisions
-                            data.id = generateUUID();
-                            data.title = `${data.title} (Imported)`;
-                            data.updatedAt = Date.now();
-
-                            await storageService.saveBoard(data, user?.id);
-                            await loadBoards(user?.id);
-                            alert('Board imported successfully!');
-                          } else {
-                            alert('Invalid board file.');
-                          }
-                        } catch (err) {
-                          console.error(err);
-                          alert('Failed to import board.');
-                        }
-                        e.target.value = ''; // Reset input
-                      }}
-                    />
-                  </label>
+                  </button>
                 </div>
               </div>
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                 <h2 className="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
                   <HomeIcon className="w-6 h-6 text-blue-500" />
                   {user ? 'Your Saved Boards' : 'Local Boards'}
                 </h2>
-                {user && (
-                  <button
-                    onClick={() => loadBoards(user.id)}
-                    className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-                    title="Refresh boards"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                    Refresh
-                  </button>
-                )}
+                <div className="flex items-center gap-3">
+                  {boards.length > 0 && (
+                    <div className="relative flex-1 sm:flex-none">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        id="board-search"
+                        type="text"
+                        placeholder="Search boards... (Ctrl+K)"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-10 pr-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-64"
+                      />
+                    </div>
+                  )}
+                  {user && (
+                    <button
+                      onClick={() => loadBoards(user.id)}
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                      title="Refresh boards (F5)"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      <span className="hidden sm:inline">Refresh</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {loading ? (
-                <div className="text-center py-12">
-                  <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-500" />
-                  <p className="mt-2 text-gray-400 dark:text-gray-500">Loading your boards...</p>
+                <div className="text-center py-16">
+                  <Loader2 className="w-12 h-12 animate-spin mx-auto text-blue-500 mb-4" />
+                  <p className="text-lg text-gray-600 dark:text-gray-400">Loading your boards...</p>
+                  <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">This may take a moment</p>
                 </div>
               ) : boards.length === 0 ? (
                 <div className="text-center py-16 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800/50 text-gray-400 dark:text-gray-500">
@@ -340,8 +440,21 @@ export default function Home() {
                   <button onClick={() => createNewBoard()} className="text-blue-600 dark:text-blue-400 hover:underline mt-2">Start creating now</button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                  {boards.map(board => (
+                <>
+                  {searchQuery && filteredBoards.length === 0 ? (
+                    <div className="text-center py-16 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+                      <Search className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                      <p className="text-lg text-gray-400 dark:text-gray-500">No boards found matching "{searchQuery}"</p>
+                      <button 
+                        onClick={() => setSearchQuery('')}
+                        className="text-blue-600 dark:text-blue-400 hover:underline mt-2"
+                      >
+                        Clear search
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                      {filteredBoards.map(board => (
                     <div
                       key={board.id}
                       onClick={() => openBoard(board.id)}
@@ -375,16 +488,34 @@ export default function Home() {
                         )}
                       </div>
 
-                      <button
-                        onClick={(e) => handleDeleteBoard(e, board.id)}
-                        className="absolute top-4 right-4 p-2 bg-white dark:bg-gray-700 rounded-full shadow-sm text-gray-300 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity transform hover:scale-110"
-                        title="Delete Board"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => handleExportBoard(e, board)}
+                          className="p-2 bg-white dark:bg-gray-700 rounded-full shadow-sm text-gray-400 dark:text-gray-500 hover:text-green-500 dark:hover:text-green-400 transition-colors transform hover:scale-110"
+                          title="Export Board"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); duplicateBoard(board); }}
+                          className="p-2 bg-white dark:bg-gray-700 rounded-full shadow-sm text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors transform hover:scale-110"
+                          title="Duplicate Board"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => handleDeleteBoard(e, board.id)}
+                          className="p-2 bg-white dark:bg-gray-700 rounded-full shadow-sm text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors transform hover:scale-110"
+                          title="Delete Board"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                  ))}
-                </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -407,6 +538,28 @@ export default function Home() {
         )}
 
       </main>
+
+      {/* Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        title="Delete Board"
+        message="Are you sure you want to delete this board? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteConfirm({ isOpen: false, boardId: null })}
+      />
+
+      {/* Template Selection Modal */}
+      <TemplateModal
+        isOpen={showTemplateModal}
+        onClose={() => setShowTemplateModal(false)}
+        onSelectTemplate={handleTemplateSelect}
+      />
+
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} onClose={removeToast} />
 
       {/* Footer */}
       <footer className="border-t dark:border-gray-700 bg-white dark:bg-gray-800 py-8 mt-12 no-print transition-colors duration-300">

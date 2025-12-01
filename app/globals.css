@@ -2,6 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  .animate-scale-in {
+    animation: scale-in 0.2s ease-out;
+  }
+  
+  .animate-slide-in {
+    animation: slide-in 0.3s ease-out;
+  }
+  
+  @keyframes scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  
+  @keyframes slide-in {
+    from {
+      opacity: 0;
+      transform: translateX(100%);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+}
+
 
 
 :root {
@@ -83,7 +115,7 @@ input[type="color"]::-moz-color-swatch {
 @media print {
   @page {
     size: A4 landscape;
-    margin: 1cm;
+    margin: 0.5cm;
   }
 
   body {
@@ -91,8 +123,15 @@ input[type="color"]::-moz-color-swatch {
     background-image: none !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    color-adjust: exact !important;
     margin: 0 !important;
     padding: 0 !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
   }
 
   .no-print {
@@ -112,12 +151,38 @@ input[type="color"]::-moz-color-swatch {
 
   .print-content {
     width: 100% !important;
-    padding: 0 !important;
+    padding: 1cm !important;
+  }
+
+  /* Optimize card printing */
+  .board-grid {
+    display: grid !important;
+    gap: 0.5cm !important;
+    grid-template-columns: repeat(4, 1fr) !important;
   }
 
   /* Ensure grid items don't break across pages */
-  .board-grid>div {
+  .board-grid > div {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
+    margin-bottom: 0.5cm !important;
+  }
+
+  /* Ensure card colors print correctly */
+  .board-grid > div {
+    border-width: 3px !important;
+  }
+
+  /* Make sure images print */
+  img {
+    max-width: 100% !important;
+    height: auto !important;
+    display: block !important;
+  }
+
+  /* Print title */
+  h1, h2 {
+    page-break-after: avoid !important;
+    margin-bottom: 0.5cm !important;
   }
 }

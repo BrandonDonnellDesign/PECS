@@ -1,63 +1,126 @@
 import { PecsBoard } from './types';
 
 export function generateUUID(): string {
-    // Simple UUID v4 generator that works in all environments including mobile
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-    });
+  return crypto.randomUUID();
 }
 
-// --- Import/Export Utilities ---
+// Export board to JSON file
+export function exportBoard(board: PecsBoard): void {
+  const dataStr = JSON.stringify(board, null, 2);
+  const dataBlob = new Blob([dataStr], { type: 'application/json' });
+  const url = URL.createObjectURL(dataBlob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${board.title.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
 
-const convertUrlToBase64 = async (url: string): Promise<string> => {
-    // If already base64, return as is
-    if (url.startsWith('data:')) return url;
-
-    try {
-        const response = await fetch(url);
-        const blob = await response.blob();
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
-    } catch (error) {
-        console.error("Failed to convert image to base64:", url, error);
-        return url; // Fallback to original URL if fetch fails
-    }
-};
-
-export const exportBoard = async (board: PecsBoard) => {
-    // Deep copy to avoid mutating state
-    const boardToExport = JSON.parse(JSON.stringify(board));
-
-    // Convert all card images to Base64
-    for (const card of boardToExport.cards) {
-        if (card.imageUrl) {
-            card.imageUrl = await convertUrlToBase64(card.imageUrl);
+// Import board from JSON file
+export function importBoard(file: File): Promise<PecsBoard> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const board = JSON.parse(e.target?.result as string) as PecsBoard;
+        // Validate basic structure
+        if (!board.id || !board.title || !Array.isArray(board.cards)) {
+          throw new Error('Invalid board format');
         }
+        // Generate new IDs to avoid conflicts
+        board.id = generateUUID();
+        board.cards = board.cards.map(card => ({
+          ...card,
+          id: generateUUID()
+        }));
+        board.updatedAt = Date.now();
+        resolve(board);
+      } catch (error) {
+        reject(new Error('Failed to parse board file'));
+      }
+    };
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsText(file);
+  });
+}
+
+// Text-to-Speech for card labels
+export function speakText(text: string, lang: string = 'en-US'): void {
+  if ('speechSynthesis' in window) {
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+    
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = lang;
+    utterance.rate = 0.9; // Slightly slower for clarity
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+    
+    window.speechSynthesis.speak(utterance);
+  }
+}
+
+// Stop any ongoing speech
+export function stopSpeech(): void {
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+  }
+}
+
+// History management for undo/redo
+export class BoardHistory {
+  private history: PecsBoard[] = [];
+  private currentIndex: number = -1;
+  private maxHistory: number = 50;
+
+  push(board: PecsBoard): void {
+    // Remove any future history if we're not at the end
+    this.history = this.history.slice(0, this.currentIndex + 1);
+    
+    // Add new state
+    this.history.push(JSON.parse(JSON.stringify(board))); // Deep clone
+    
+    // Limit history size
+    if (this.history.length > this.maxHistory) {
+      this.history.shift();
+    } else {
+      this.currentIndex++;
     }
+  }
 
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(boardToExport));
-    const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", `${board.title.replace(/\s+/g, '_')}_board.json`);
-    document.body.appendChild(downloadAnchorNode); // required for firefox
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
-};
+  undo(): PecsBoard | null {
+    if (this.currentIndex > 0) {
+      this.currentIndex--;
+      return JSON.parse(JSON.stringify(this.history[this.currentIndex]));
+    }
+    return null;
+  }
 
-export const validateBoard = (data: any): data is PecsBoard => {
-    if (!data || typeof data !== 'object') return false;
+  redo(): PecsBoard | null {
+    if (this.currentIndex < this.history.length - 1) {
+      this.currentIndex++;
+      return JSON.parse(JSON.stringify(this.history[this.currentIndex]));
+    }
+    return null;
+  }
 
-    // Basic schema check
-    const requiredFields = ['id', 'title', 'cards', 'gridColumns'];
-    const hasFields = requiredFields.every(field => field in data);
+  canUndo(): boolean {
+    return this.currentIndex > 0;
+  }
 
-    if (!hasFields) return false;
-    if (!Array.isArray(data.cards)) return false;
+  canRedo(): boolean {
+    return this.currentIndex < this.history.length - 1;
+  }
 
-    return true;
-};
+  clear(): void {
+    this.history = [];
+    this.currentIndex = -1;
+  }
+
+  initialize(board: PecsBoard): void {
+    this.clear();
+    this.push(board);
+  }
+}
