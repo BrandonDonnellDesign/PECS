@@ -144,28 +144,40 @@ export const storageService = {
         // If including family boards, get those too
         if (includeFamily) {
           try {
+            console.log("Fetching family groups for user:", userId);
             // Get family groups the user belongs to
-            const { data: memberGroups } = await supabase
+            const { data: memberGroups, error: memberError } = await supabase
               .from('family_members')
               .select('family_group_id')
               .eq('user_id', userId);
 
+            console.log("Family groups:", { memberGroups, memberError });
+
             if (memberGroups && memberGroups.length > 0) {
               const groupIds = memberGroups.map(m => m.family_group_id);
+              console.log("Looking for boards in groups:", groupIds);
               
               // Get boards for those family groups
-              const { data: familyBoards } = await supabase
+              const { data: familyBoards, error: familyBoardsError } = await supabase
                 .from('boards')
                 .select('*')
                 .in('group_id', groupIds)
                 .order('updatedAt', { ascending: false });
 
-              if (familyBoards) {
+              console.log("Family boards result:", { familyBoards, familyBoardsError });
+
+              if (familyBoards && familyBoards.length > 0) {
+                console.log(`Found ${familyBoards.length} family boards`);
                 // Merge family boards with own boards (avoid duplicates)
                 const ownBoardIds = new Set(allBoards.map(b => b.id));
                 const uniqueFamilyBoards = familyBoards.filter(b => !ownBoardIds.has(b.id));
+                console.log(`Adding ${uniqueFamilyBoards.length} unique family boards`);
                 allBoards = [...allBoards, ...uniqueFamilyBoards];
+              } else {
+                console.log("No family boards found");
               }
+            } else {
+              console.log("User is not a member of any family groups");
             }
           } catch (familyError) {
             console.error("Error loading family boards:", familyError);
@@ -405,48 +417,87 @@ export const familyService = {
   getFamilyGroups: async (userId: string): Promise<FamilyGroupWithMembers[]> => {
     if (!supabase) return [];
 
-    const { data, error } = await supabase
-      .from('family_groups')
-      .select(`
-        *,
-        family_members (
-          id,
-          family_group_id,
-          user_id,
-          role,
-          joined_at,
-          profiles (
-            id,
-            email,
-            display_name
-          )
-        )
-      `)
-      .eq('family_members.user_id', userId);
+    try {
+      // First get the groups the user is a member of
+      const { data: memberData, error: memberError } = await supabase
+        .from('family_members')
+        .select('family_group_id')
+        .eq('user_id', userId);
 
-    if (error || !data) return [];
+      if (memberError || !memberData || memberData.length === 0) {
+        return [];
+      }
 
-    return data.map(group => ({
-      id: group.id,
-      name: group.name,
-      createdBy: group.created_by,
-      createdAt: group.created_at,
-      updatedAt: group.updated_at,
-      members: group.family_members.map((member: any) => ({
-        id: member.id,
-        familyGroupId: member.family_group_id,
-        userId: member.user_id,
-        role: member.role,
-        joinedAt: member.joined_at,
-        profile: member.profiles ? {
-          id: member.profiles.id,
-          email: member.profiles.email,
-          displayName: member.profiles.display_name,
-          createdAt: '',
-          updatedAt: ''
-        } : undefined
-      }))
-    }));
+      const groupIds = memberData.map(m => m.family_group_id);
+
+      // Get the groups
+      const { data: groupsData, error: groupsError } = await supabase
+        .from('family_groups')
+        .select('*')
+        .in('id', groupIds);
+
+      if (groupsError || !groupsData) {
+        console.error("Error fetching groups:", groupsError);
+        return [];
+      }
+
+      // Get ALL members for these groups (not filtered by user_id)
+      const { data: allMembers, error: membersError } = await supabase
+        .from('family_members')
+        .select('id, family_group_id, user_id, role, joined_at')
+        .in('family_group_id', groupIds);
+
+      if (membersError) {
+        console.error("Error fetching members:", membersError);
+      }
+
+      // Get profiles for all members
+      const memberUserIds = (allMembers || []).map((m: any) => m.user_id);
+      
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, email, display_name')
+        .in('id', memberUserIds);
+
+      // Create a map of profiles
+      const profileMap = new Map();
+      (profiles || []).forEach((p: any) => {
+        profileMap.set(p.id, p);
+      });
+
+      // Combine the data
+      const result = groupsData.map(group => ({
+        id: group.id,
+        name: group.name,
+        createdBy: group.created_by,
+        createdAt: group.created_at,
+        updatedAt: group.updated_at,
+        members: (allMembers || [])
+          .filter((m: any) => m.family_group_id === group.id)
+          .map((member: any) => {
+            const profile = profileMap.get(member.user_id);
+            return {
+              id: member.id,
+              familyGroupId: member.family_group_id,
+              userId: member.user_id,
+              role: member.role,
+              joinedAt: member.joined_at,
+              profile: profile ? {
+                id: profile.id,
+                email: profile.email,
+                displayName: profile.display_name,
+                createdAt: '',
+                updatedAt: ''
+              } : undefined
+            };
+          })
+      }));
+
+      return result;
+    } catch (error) {
+      console.error("Exception in getFamilyGroups:", error);
+      return [];
+    }
   },
 
   getFamilyGroupMembers: async (familyGroupId: string): Promise<FamilyMember[]> => {
@@ -488,15 +539,75 @@ export const familyService = {
     if (!supabase) throw new Error("Supabase not configured");
 
     try {
-      // First check if user exists in auth.users
-      const { data: authUser, error: authError } = await supabase
-        .from('profiles')
-        .select('id, email')
-        .eq('email', email.toLowerCase().trim())
-        .single();
+      const cleanEmail = email.toLowerCase().trim();
+      
+      // Use RPC or direct auth.users query to find user (bypassing RLS)
+      // Since we can't query auth.users directly, we'll try to add them and let the database handle it
+      
+      // First, try to find the user in profiles without RLS restrictions
+      // We'll use the service to create a temporary admin client
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      
+      if (!currentUser) {
+        alert('You must be logged in to add members.');
+        return false;
+      }
 
-      if (authError || !authUser) {
-        console.error("User not found:", email);
+      // Create a function call that uses security definer to bypass RLS
+      const { data: userData, error: userError } = await supabase.rpc('get_user_id_by_email', {
+        user_email: cleanEmail
+      });
+
+      // If RPC doesn't exist, fall back to direct insert attempt
+      if (userError && userError.code === '42883') {
+        // Function doesn't exist, try direct approach
+        console.log('RPC function not found, trying direct insert');
+        
+        // Get all profiles to find the user (this works if RLS is disabled on profiles)
+        const { data: allProfiles } = await supabase
+          .from('profiles')
+          .select('id, email');
+        
+        const targetProfile = allProfiles?.find(p => p.email?.toLowerCase() === cleanEmail);
+        
+        if (!targetProfile) {
+          alert(`User with email "${email}" not found. They need to create an account first.`);
+          return false;
+        }
+
+        // Check if already a member
+        const { data: existingMember } = await supabase
+          .from('family_members')
+          .select('id')
+          .eq('family_group_id', familyGroupId)
+          .eq('user_id', targetProfile.id)
+          .single();
+
+        if (existingMember) {
+          alert(`${email} is already a member of this group.`);
+          return false;
+        }
+
+        // Add as member
+        const { error } = await supabase
+          .from('family_members')
+          .insert({
+            family_group_id: familyGroupId,
+            user_id: targetProfile.id,
+            role
+          });
+
+        if (error) {
+          console.error("Error adding family member:", error);
+          alert(`Failed to add member: ${error.message}`);
+          return false;
+        }
+
+        return true;
+      }
+
+      if (userError || !userData) {
+        console.error("User not found:", cleanEmail, userError);
         alert(`User with email "${email}" not found. They need to create an account first.`);
         return false;
       }
@@ -506,7 +617,7 @@ export const familyService = {
         .from('family_members')
         .select('id')
         .eq('family_group_id', familyGroupId)
-        .eq('user_id', authUser.id)
+        .eq('user_id', userData)
         .single();
 
       if (existingMember) {
@@ -519,7 +630,7 @@ export const familyService = {
         .from('family_members')
         .insert({
           family_group_id: familyGroupId,
-          user_id: authUser.id,
+          user_id: userData,
           role
         });
 

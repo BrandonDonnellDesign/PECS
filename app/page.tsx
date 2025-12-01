@@ -10,7 +10,7 @@ import FamilyGroups from './components/FamilyGroups';
 import UserDebug from './components/UserDebug';
 import { authService, storageService } from './services/supabase';
 import { generateUUID } from './utils';
-import { LayoutGrid, Printer, Plus, Home as HomeIcon, Sparkles, LogOut, User as UserIcon, Loader2, Trash2, ArrowLeft, Upload, Users } from 'lucide-react';
+import { LayoutGrid, Printer, Plus, Home as HomeIcon, Sparkles, LogOut, User as UserIcon, Loader2, Trash2, ArrowLeft, Upload, Users, RefreshCw } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 
 export default function Home() {
@@ -24,6 +24,43 @@ export default function Home() {
   useEffect(() => {
     checkUser();
   }, []);
+
+  // Set up real-time subscription for boards
+  useEffect(() => {
+    if (!user) return;
+
+    const { createClient } = require('@supabase/supabase-js');
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) return;
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Subscribe to ALL board changes (we'll filter client-side)
+    const channel = supabase
+      .channel('boards-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'boards'
+        },
+        (payload: any) => {
+          console.log('Board change detected:', payload);
+          // Reload boards when changes occur
+          loadBoards(user.id);
+        }
+      )
+      .subscribe((status: string) => {
+        console.log('Realtime subscription status:', status);
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   // Auto-trigger print when entering print route
   useEffect(() => {
@@ -279,10 +316,22 @@ export default function Home() {
             </div>
 
             <div>
-              <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-6 flex items-center gap-2">
-                <HomeIcon className="w-6 h-6 text-blue-500" />
-                {user ? 'Your Saved Boards' : 'Local Boards'}
-              </h2>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                  <HomeIcon className="w-6 h-6 text-blue-500" />
+                  {user ? 'Your Saved Boards' : 'Local Boards'}
+                </h2>
+                {user && (
+                  <button
+                    onClick={() => loadBoards(user.id)}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                    title="Refresh boards"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Refresh
+                  </button>
+                )}
+              </div>
 
               {loading ? (
                 <div className="text-center py-12">
