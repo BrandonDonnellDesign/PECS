@@ -112,6 +112,36 @@ export const authService = {
   signOut: async () => {
     if (!supabase) return;
     return supabase.auth.signOut();
+  },
+
+  signInWithGoogle: async () => {
+    if (!supabase) throw new Error("Supabase not configured");
+    
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        }
+      }
+    });
+    
+    return { data, error };
+  },
+
+  signInWithProvider: async (provider: 'google' | 'github' | 'facebook') => {
+    if (!supabase) throw new Error("Supabase not configured");
+    
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: `${window.location.origin}`
+      }
+    });
+    
+    return { data, error };
   }
 };
 
