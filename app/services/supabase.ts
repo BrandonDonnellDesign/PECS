@@ -52,7 +52,6 @@ export const authService = {
               email: userData.user.email,
               display_name: userData.user.user_metadata?.display_name || userData.user.email?.split('@')[0]
             });
-          console.log("Profile created for user:", userId);
         }
       }
     } catch (error) {
@@ -121,21 +120,16 @@ export const storageService = {
     if (supabase && userId) {
       try {
         // Get user's own boards
-        console.log("Fetching boards for user:", userId);
         const { data: ownBoards, error: ownError } = await supabase
           .from('boards')
           .select('*')
           .eq('user_id', userId)
           .order('updatedAt', { ascending: false });
 
-        console.log("Query result:", { ownBoards, ownError, hasError: !!ownError, hasData: !!ownBoards });
-
         if (ownError) {
-          console.error("Supabase getBoards error:", ownError);
-          console.error("Error type:", typeof ownError);
-          console.error("Error keys:", Object.keys(ownError));
-          console.error("Error string:", String(ownError));
-          console.error("Error JSON:", JSON.stringify(ownError, null, 2));
+          console.error("Supabase getBoards error - Message:", ownError.message);
+          console.error("Supabase getBoards error - Code:", ownError.code);
+          console.error("Supabase getBoards error - Full:", JSON.stringify(ownError));
           // Fall through to local storage
         }
 
@@ -144,40 +138,28 @@ export const storageService = {
         // If including family boards, get those too
         if (includeFamily) {
           try {
-            console.log("Fetching family groups for user:", userId);
             // Get family groups the user belongs to
-            const { data: memberGroups, error: memberError } = await supabase
+            const { data: memberGroups } = await supabase
               .from('family_members')
               .select('family_group_id')
               .eq('user_id', userId);
 
-            console.log("Family groups:", { memberGroups, memberError });
-
             if (memberGroups && memberGroups.length > 0) {
               const groupIds = memberGroups.map(m => m.family_group_id);
-              console.log("Looking for boards in groups:", groupIds);
               
               // Get boards for those family groups
-              const { data: familyBoards, error: familyBoardsError } = await supabase
+              const { data: familyBoards } = await supabase
                 .from('boards')
                 .select('*')
                 .in('group_id', groupIds)
                 .order('updatedAt', { ascending: false });
 
-              console.log("Family boards result:", { familyBoards, familyBoardsError });
-
               if (familyBoards && familyBoards.length > 0) {
-                console.log(`Found ${familyBoards.length} family boards`);
                 // Merge family boards with own boards (avoid duplicates)
                 const ownBoardIds = new Set(allBoards.map(b => b.id));
                 const uniqueFamilyBoards = familyBoards.filter(b => !ownBoardIds.has(b.id));
-                console.log(`Adding ${uniqueFamilyBoards.length} unique family boards`);
                 allBoards = [...allBoards, ...uniqueFamilyBoards];
-              } else {
-                console.log("No family boards found");
               }
-            } else {
-              console.log("User is not a member of any family groups");
             }
           } catch (familyError) {
             console.error("Error loading family boards:", familyError);
@@ -198,8 +180,6 @@ export const storageService = {
             updatedAt: board.updatedAt || Date.now()
           }));
           
-          console.log("Loaded boards from Supabase:", boards);
-          
           // Also sync to local storage as cache
           localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(boards));
           return boards;
@@ -212,9 +192,7 @@ export const storageService = {
     // Local Fallback
     if (typeof window !== 'undefined') {
       const local = localStorage.getItem(LOCAL_STORAGE_KEY);
-      const boards = local ? JSON.parse(local) : [];
-      console.log("Loaded boards from localStorage:", boards);
-      return boards;
+      return local ? JSON.parse(local) : [];
     }
     return [];
   },
@@ -251,8 +229,6 @@ export const storageService = {
         const { error } = await supabase.from('boards').upsert(dbBoard);
         if (error) {
           console.error("Supabase save error:", error);
-        } else {
-          console.log("Board saved successfully:", board.id);
         }
       } catch (err) {
         console.error("Error saving board to Supabase:", err);
@@ -303,11 +279,8 @@ export const storageService = {
 export const familyService = {
   createFamilyGroup: async (name: string, userId: string): Promise<FamilyGroup | null> => {
     if (!supabase) {
-      console.error("Supabase not configured");
       throw new Error("Supabase not configured");
     }
-    
-    console.log("Creating family group:", { name, userId });
     
     try {
       // First, check if tables exist
@@ -329,14 +302,11 @@ export const familyService = {
         .eq('id', userId)
         .single();
 
-      console.log("Profile check:", { existingProfile, profileCheckError });
-
       if (!existingProfile && profileCheckError?.code !== 'PGRST116') {
         console.error("Error checking profile:", profileCheckError);
       }
 
       if (!existingProfile) {
-        console.log("Profile doesn't exist, creating...");
         // Create profile if it doesn't exist
         const { data: userData } = await supabase.auth.getUser();
         if (userData.user) {
@@ -355,12 +325,10 @@ export const familyService = {
             alert(`Failed to create profile: ${createProfileError.message}. Check console for details.`);
             return null;
           }
-          console.log("Profile created:", newProfile);
         }
       }
 
       // Create the family group
-      console.log("Creating family group in database...");
       const { data: groupData, error: groupError } = await supabase
         .from('family_groups')
         .insert({ name, created_by: userId })
@@ -379,10 +347,7 @@ export const familyService = {
         return null;
       }
 
-      console.log("Family group created:", groupData);
-
       // Add creator as owner
-      console.log("Adding creator as owner...");
       const { error: memberError } = await supabase
         .from('family_members')
         .insert({
@@ -399,7 +364,6 @@ export const familyService = {
         return null;
       }
 
-      console.log("Family group created successfully!");
       return {
         id: groupData.id,
         name: groupData.name,
@@ -561,8 +525,6 @@ export const familyService = {
       // If RPC doesn't exist, fall back to direct insert attempt
       if (userError && userError.code === '42883') {
         // Function doesn't exist, try direct approach
-        console.log('RPC function not found, trying direct insert');
-        
         // Get all profiles to find the user (this works if RLS is disabled on profiles)
         const { data: allProfiles } = await supabase
           .from('profiles')

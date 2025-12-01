@@ -7,7 +7,6 @@ import Board from './components/Board';
 import Auth from './components/Auth';
 import ThemeToggle from './components/ThemeToggle';
 import FamilyGroups from './components/FamilyGroups';
-import UserDebug from './components/UserDebug';
 import { authService, storageService } from './services/supabase';
 import { generateUUID } from './utils';
 import { LayoutGrid, Printer, Plus, Home as HomeIcon, Sparkles, LogOut, User as UserIcon, Loader2, Trash2, ArrowLeft, Upload, Users, RefreshCw } from 'lucide-react';
@@ -47,15 +46,12 @@ export default function Home() {
           schema: 'public',
           table: 'boards'
         },
-        (payload: any) => {
-          console.log('Board change detected:', payload);
+        () => {
           // Reload boards when changes occur
           loadBoards(user.id);
         }
       )
-      .subscribe((status: string) => {
-        console.log('Realtime subscription status:', status);
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
@@ -88,7 +84,6 @@ export default function Home() {
   const loadBoards = async (userId?: string) => {
     try {
       const data = await storageService.getBoards(userId);
-      console.log("Loaded boards:", data);
       setBoards(data);
     } catch (error) {
       console.error("Error loading boards:", error);
@@ -423,8 +418,7 @@ export default function Home() {
         </div>
       </footer>
 
-      {/* Debug Component - Remove after setup */}
-      {user && <UserDebug />}
+
     </div>
   );
 }
