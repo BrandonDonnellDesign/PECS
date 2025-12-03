@@ -15,6 +15,7 @@ import { authService, storageService } from './services/supabase';
 import { generateUUID, exportBoard, importBoard, initializeTTS } from './utils';
 import { LayoutGrid, Printer, Plus, Home as HomeIcon, Sparkles, LogOut, User as UserIcon, Loader2, Trash2, ArrowLeft, Upload, Users, RefreshCw, Search, Copy, Download, FileUp } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
+import KeyboardShortcuts from './components/KeyboardShortcuts';
 
 export default function Home() {
   const [route, setRoute] = useState<AppRoute>(AppRoute.HOME);
@@ -27,6 +28,7 @@ export default function Home() {
   const [toasts, setToasts] = useState<ToastProps[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   useEffect(() => {
     checkUser();
@@ -53,6 +55,14 @@ export default function Home() {
         if (deleteConfirm.isOpen) {
           setDeleteConfirm({ isOpen: false, boardId: null });
         }
+        if (showShortcuts) {
+          setShowShortcuts(false);
+        }
+      }
+      // ?: Show keyboard shortcuts
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        setShowShortcuts(true);
       }
     };
 
@@ -561,6 +571,12 @@ export default function Home() {
 
       {/* Toast Notifications */}
       <ToastContainer toasts={toasts} onClose={removeToast} />
+
+      {/* Keyboard Shortcuts Modal */}
+      <KeyboardShortcuts
+        isOpen={showShortcuts}
+        onClose={() => setShowShortcuts(false)}
+      />
 
       {/* Footer */}
       <footer className="border-t dark:border-gray-700 bg-white dark:bg-gray-800 py-8 mt-12 no-print transition-colors duration-300">

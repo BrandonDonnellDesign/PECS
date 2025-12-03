@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Users, Plus, Trash2, UserPlus, Shield, Crown, LayoutGrid } from 'lucide-react';
+import { Users, Plus, Trash2, Shield, Crown, LayoutGrid, Key, LogIn } from 'lucide-react';
 import { familyService, authService, storageService } from '../services/supabase';
 import { FamilyGroupWithMembers, FamilyMember, PecsBoard } from '../types';
+import InviteCodeModal from './InviteCodeModal';
+import JoinGroupModal from './JoinGroupModal';
 
 interface FamilyGroupsProps {
   onBoardCreate?: (groupId: string) => void;
@@ -15,10 +17,11 @@ export default function FamilyGroups({ onBoardCreate }: FamilyGroupsProps) {
   const [userId, setUserId] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
-  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
-  const [newMemberEmail, setNewMemberEmail] = useState('');
-  const [newMemberRole, setNewMemberRole] = useState<'admin' | 'member'>('member');
+
   const [groupBoards, setGroupBoards] = useState<Record<string, PecsBoard[]>>({});
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [currentInviteCode, setCurrentInviteCode] = useState<{ code: string; expiresAt: string; groupName: string } | null>(null);
 
   useEffect(() => {
     loadFamilyGroups();
@@ -69,30 +72,7 @@ export default function FamilyGroups({ onBoardCreate }: FamilyGroupsProps) {
     }
   };
 
-  const handleAddMember = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedGroup || !newMemberEmail.trim()) return;
 
-    try {
-      const success = await familyService.addFamilyMember(
-        selectedGroup,
-        newMemberEmail.trim(),
-        newMemberRole
-      );
-      
-      if (success) {
-        await loadFamilyGroups();
-        setNewMemberEmail('');
-        setNewMemberRole('member');
-        setSelectedGroup(null);
-        alert('Member added successfully!');
-      }
-      // Error messages are handled in the service
-    } catch (error) {
-      console.error('Error adding member:', error);
-      alert('Failed to add member. Check console for details.');
-    }
-  };
 
   const handleRemoveMember = async (memberId: string) => {
     if (!confirm('Remove this member from the family group?')) return;
@@ -123,6 +103,33 @@ export default function FamilyGroups({ onBoardCreate }: FamilyGroupsProps) {
     }
   };
 
+  const handleGenerateInviteCode = async (groupId: string, groupName: string) => {
+    try {
+      const result = await familyService.generateInviteCode(groupId);
+      if (result) {
+        setCurrentInviteCode({
+          code: result.code,
+          expiresAt: result.expiresAt,
+          groupName
+        });
+        setShowInviteModal(true);
+      } else {
+        alert('Failed to generate invite code');
+      }
+    } catch (error) {
+      console.error('Error generating invite code:', error);
+      alert('Failed to generate invite code');
+    }
+  };
+
+  const handleJoinWithCode = async (code: string) => {
+    const result = await familyService.joinWithCode(code);
+    if (result.success) {
+      await loadFamilyGroups();
+    }
+    return result;
+  };
+
   const getRoleIcon = (role: string) => {
     switch (role) {
       case 'owner':
@@ -150,13 +157,22 @@ export default function FamilyGroups({ onBoardCreate }: FamilyGroupsProps) {
           <Users className="w-6 h-6" />
           Family Groups
         </h2>
-        <button
-          onClick={() => setShowCreateForm(!showCreateForm)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-        >
-          <Plus className="w-4 h-4" />
-          Create Group
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setShowJoinModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+          >
+            <LogIn className="w-4 h-4" />
+            Join Group
+          </button>
+          <button
+            onClick={() => setShowCreateForm(!showCreateForm)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+          >
+            <Plus className="w-4 h-4" />
+            Create Group
+          </button>
+        </div>
       </div>
 
       {showCreateForm && (
@@ -257,48 +273,12 @@ export default function FamilyGroups({ onBoardCreate }: FamilyGroupsProps) {
             {canManageGroup(group) && (
               <div className="border-t pt-4">
                 <button
-                  onClick={() => setSelectedGroup(selectedGroup === group.id ? null : group.id)}
-                  className="flex items-center gap-2 text-sm text-blue-500 hover:text-blue-700"
+                  onClick={() => handleGenerateInviteCode(group.id, group.name)}
+                  className="flex items-center gap-2 text-sm text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 font-medium"
                 >
-                  <UserPlus className="w-4 h-4" />
-                  Add Member
+                  <Key className="w-4 h-4" />
+                  Generate Invite Code
                 </button>
-
-                {selectedGroup === group.id && (
-                  <form onSubmit={handleAddMember} className="mt-3 space-y-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <input
-                      type="email"
-                      value={newMemberEmail}
-                      onChange={(e) => setNewMemberEmail(e.target.value)}
-                      placeholder="Member email"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      required
-                    />
-                    <select
-                      value={newMemberRole}
-                      onChange={(e) => setNewMemberRole(e.target.value as 'admin' | 'member')}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="member">Member</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                    <div className="flex gap-2">
-                      <button
-                        type="submit"
-                        className="px-3 py-1.5 text-sm bg-green-500 text-white rounded hover:bg-green-600 font-medium"
-                      >
-                        Add
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedGroup(null)}
-                        className="px-3 py-1.5 text-sm bg-gray-500 dark:bg-gray-600 text-white rounded hover:bg-gray-600 dark:hover:bg-gray-700 font-medium"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </form>
-                )}
               </div>
             )}
           </div>
@@ -311,6 +291,37 @@ export default function FamilyGroups({ onBoardCreate }: FamilyGroupsProps) {
           <p>No family groups yet. Create one to start sharing boards!</p>
         </div>
       )}
+
+      {/* Invite Code Modal */}
+      {currentInviteCode && (
+        <InviteCodeModal
+          isOpen={showInviteModal}
+          groupName={currentInviteCode.groupName}
+          inviteCode={currentInviteCode.code}
+          expiresAt={currentInviteCode.expiresAt}
+          onClose={() => {
+            setShowInviteModal(false);
+            setCurrentInviteCode(null);
+          }}
+          onRefresh={() => {
+            setShowInviteModal(false);
+            setCurrentInviteCode(null);
+            if (currentInviteCode) {
+              const group = familyGroups.find(g => g.name === currentInviteCode.groupName);
+              if (group) {
+                handleGenerateInviteCode(group.id, group.name);
+              }
+            }
+          }}
+        />
+      )}
+
+      {/* Join Group Modal */}
+      <JoinGroupModal
+        isOpen={showJoinModal}
+        onClose={() => setShowJoinModal(false)}
+        onJoin={handleJoinWithCode}
+      />
     </div>
   );
 }

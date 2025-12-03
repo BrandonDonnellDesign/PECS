@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PecsBoard, PecsCard, FamilyGroup } from '../types';
 import CardEditor from './CardEditor';
-import { Plus, Trash2, Edit2, GripVertical, Settings2, Palette, Users, Share2, Undo2, Redo2, Volume2 } from 'lucide-react';
+import { Plus, Trash2, Edit2, GripVertical, Settings2, Palette, Users, Share2, Undo2, Redo2, Volume2, Filter, Search, Copy, Check, Clock } from 'lucide-react';
 import { storageService, familyService } from '../services/supabase';
 import { BoardHistory, speakText } from '../utils';
 
@@ -24,6 +24,10 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
   const historyRef = useRef(new BoardHistory());
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
   // Initialize history when board loads
   useEffect(() => {
@@ -112,7 +116,14 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
     }
   };
 
-  const handleSaveCard = (newCard: PecsCard) => {
+  const saveWithIndicator = async (updatedBoard: PecsBoard) => {
+    setIsSaving(true);
+    await storageService.saveBoard(updatedBoard, userId);
+    setLastSaved(new Date());
+    setTimeout(() => setIsSaving(false), 500);
+  };
+
+  const handleSaveCard = async (newCard: PecsCard) => {
     let newCards = [...board.cards];
     if (editingCard) {
       newCards = newCards.map(c => c.id === newCard.id ? newCard : c);
@@ -123,13 +134,13 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
     const updatedBoard = { ...board, cards: newCards, updatedAt: Date.now() };
     saveToHistory(updatedBoard);
     onUpdate(updatedBoard);
-    storageService.saveBoard(updatedBoard, userId);
+    await saveWithIndicator(updatedBoard);
 
     setEditingCard(null);
     setIsCreatorOpen(false);
   };
 
-  const handleDeleteCard = (id: string) => {
+  const handleDeleteCard = async (id: string) => {
     if (confirm("Remove this card?")) {
       const updatedBoard = {
         ...board,
@@ -138,8 +149,23 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
       };
       saveToHistory(updatedBoard);
       onUpdate(updatedBoard);
-      storageService.saveBoard(updatedBoard, userId);
+      await saveWithIndicator(updatedBoard);
     }
+  };
+
+  const handleDuplicateCard = async (card: PecsCard) => {
+    const duplicate: PecsCard = {
+      ...card,
+      id: crypto.randomUUID()
+    };
+    const updatedBoard = {
+      ...board,
+      cards: [...board.cards, duplicate],
+      updatedAt: Date.now()
+    };
+    saveToHistory(updatedBoard);
+    onUpdate(updatedBoard);
+    await saveWithIndicator(updatedBoard);
   };
 
   // Simple Drag and Drop implementation
@@ -177,10 +203,41 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
 
   const [speakingCardId, setSpeakingCardId] = useState<string | null>(null);
 
-  const handleCardClick = (card: PecsCard) => {
+  // Filter cards based on search and category
+  const filteredCards = board.cards.filter(card => {
+    const matchesSearch = card.label.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = categoryFilter === 'all' || card.category === categoryFilter;
+    return matchesSearch && matchesCategory;
+  });
+
+  const handleCardClick = async (card: PecsCard) => {
     if (!readOnly) {
+      // Update usage statistics
+      const updatedCard = {
+        ...card,
+        usageCount: (card.usageCount || 0) + 1,
+        lastUsed: Date.now()
+      };
+
+      const updatedBoard = {
+        ...board,
+        cards: board.cards.map(c => c.id === card.id ? updatedCard : c),
+        updatedAt: Date.now()
+      };
+
+      onUpdate(updatedBoard);
+      await saveWithIndicator(updatedBoard);
+
+      // Visual and audio feedback
       setSpeakingCardId(card.id);
-      speakText(card.label);
+      
+      // Play custom audio if available, otherwise use TTS
+      if (card.audioUrl) {
+        const audio = new Audio(card.audioUrl);
+        audio.play();
+      } else {
+        speakText(card.label);
+      }
       
       // Clear speaking state after a delay
       setTimeout(() => {
@@ -214,8 +271,8 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
                 value={board.title}
                 onChange={(e) => updateBoardSettings({ title: e.target.value })}
               />
-              <div className="flex items-center gap-3 mt-1">
-                <p className="text-gray-500 dark:text-gray-400 text-sm">{board.cards.length} Cards</p>
+              <div className="flex items-center gap-3 mt-1 flex-wrap">
+                <p className="text-gray-500 dark:text-gray-400 text-sm">{filteredCards.length} / {board.cards.length} Cards</p>
                 {familyGroupName && (
                   <>
                     <span className="text-gray-300 dark:text-gray-600">•</span>
@@ -225,8 +282,55 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
                     </div>
                   </>
                 )}
+                {lastSaved && (
+                  <>
+                    <span className="text-gray-300 dark:text-gray-600">•</span>
+                    <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
+                      {isSaving ? (
+                        <>
+                          <Clock className="w-3 h-3 animate-spin" />
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-3 h-3 text-green-600 dark:text-green-400" />
+                          <span>Saved</span>
+                        </>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
+
+            {/* Search and Filter Bar */}
+            <div className="flex gap-2 flex-wrap">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search cards..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="px-4 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                <option value="all">All Categories</option>
+                <option value="noun">Nouns</option>
+                <option value="verb">Verbs</option>
+                <option value="adjective">Adjectives</option>
+                <option value="social">Social</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div></div>
 
             <div className="flex gap-3 w-full sm:w-auto">
               <div className="relative share-menu-container">
@@ -388,7 +492,7 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
           padding: readOnly ? '16px' : '0'
         } as React.CSSProperties}
       >
-        {board.cards.map((card, index) => (
+        {filteredCards.map((card, index) => (
           <div
             key={card.id}
             draggable={!readOnly}
@@ -396,9 +500,10 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
             onDragOver={(e) => handleDragOver(e, index)}
             onDrop={(e) => handleDrop(e, index)}
             className={`
-              relative aspect-square border-4 rounded-xl overflow-hidden flex flex-col shadow-sm transition-transform hover:shadow-md bg-white
-              ${readOnly ? '' : 'cursor-grab active:cursor-grabbing'}
-              break-inside-avoid
+              relative aspect-square border-4 rounded-xl overflow-hidden flex flex-col shadow-sm bg-white
+              ${readOnly ? '' : 'cursor-grab active:cursor-grabbing animate-card-hover'}
+              ${speakingCardId === card.id ? 'animate-card-click' : ''}
+              break-inside-avoid animate-bounce-in
             `}
             style={{ borderColor: card.backgroundColor }}
           >
@@ -436,16 +541,25 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
 
             {/* Edit Controls */}
             {!readOnly && (
-              <div className="absolute top-2 right-2 flex gap-1 opacity-0 hover:opacity-100 transition-opacity bg-white/80 rounded-lg p-1 shadow-sm backdrop-blur-sm">
+              <div className="absolute top-2 right-2 flex gap-1 opacity-0 hover:opacity-100 transition-opacity bg-white/80 dark:bg-gray-800/80 rounded-lg p-1 shadow-sm backdrop-blur-sm">
+                <button
+                  onClick={() => handleDuplicateCard(card)}
+                  className="p-1.5 hover:bg-green-100 dark:hover:bg-green-900/40 rounded text-green-600 dark:text-green-400"
+                  title="Duplicate Card"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
                 <button
                   onClick={() => { setEditingCard(card); setIsCreatorOpen(true); }}
-                  className="p-1.5 hover:bg-blue-100 rounded text-blue-600"
+                  className="p-1.5 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded text-blue-600 dark:text-blue-400"
+                  title="Edit Card"
                 >
                   <Edit2 className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => handleDeleteCard(card.id)}
-                  className="p-1.5 hover:bg-red-100 rounded text-red-600"
+                  className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/40 rounded text-red-600 dark:text-red-400"
+                  title="Delete Card"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>

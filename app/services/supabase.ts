@@ -476,68 +476,7 @@ export const familyService = {
     }));
   },
 
-  addFamilyMember: async (familyGroupId: string, email: string, role: 'admin' | 'member' = 'member'): Promise<boolean> => {
-    if (!supabase) throw new Error("Supabase not configured");
 
-    try {
-      const cleanEmail = email.toLowerCase().trim();
-      
-      // Get current user
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (!currentUser) {
-        alert('You must be logged in to add members.');
-        return false;
-      }
-
-      // Find the user by email (profiles table allows SELECT for all authenticated users)
-      const { data: profiles, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, email')
-        .eq('email', cleanEmail)
-        .limit(1);
-        
-      if (profileError || !profiles || profiles.length === 0) {
-        alert(`User with email "${email}" not found. They need to create an account first.`);
-        return false;
-      }
-
-      const targetUserId = profiles[0].id;
-
-      // Check if already a member
-      const { data: existingMember } = await supabase
-        .from('family_members')
-        .select('id')
-        .eq('family_group_id', familyGroupId)
-        .eq('user_id', targetUserId)
-        .maybeSingle();
-
-      if (existingMember) {
-        alert(`${email} is already a member of this group.`);
-        return false;
-      }
-
-      // Use the helper function to add member with permission checking
-      const { data: memberId, error: addError } = await supabase
-        .rpc('add_family_member', {
-          p_family_group_id: familyGroupId,
-          p_user_id: targetUserId,
-          p_role: role,
-          p_added_by: currentUser.id
-        });
-
-      if (addError) {
-        console.error("Error adding family member:", addError);
-        alert(`Failed to add member: ${addError.message}`);
-        return false;
-      }
-
-      return true;
-    } catch (error) {
-      console.error("Exception adding family member:", error);
-      alert('An unexpected error occurred. Check console for details.');
-      return false;
-    }
-  },
 
   removeFamilyMember: async (memberId: string): Promise<boolean> => {
     if (!supabase) throw new Error("Supabase not configured");
@@ -565,6 +504,105 @@ export const familyService = {
       return true;
     } catch (error) {
       console.error("Exception removing family member:", error);
+      return false;
+    }
+  },
+
+  generateInviteCode: async (familyGroupId: string): Promise<{ code: string; expiresAt: string } | null> => {
+    if (!supabase) throw new Error("Supabase not configured");
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+
+      // Generate code
+      const { data: codeData, error: codeError } = await supabase.rpc('generate_invite_code');
+      if (codeError) throw codeError;
+
+      const code = codeData as string;
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+      // Save to database
+      const { error: insertError } = await supabase
+        .from('family_group_invites')
+        .insert({
+          family_group_id: familyGroupId,
+          invite_code: code,
+          created_by: user.id,
+          role: 'member',
+          expires_at: expiresAt,
+          max_uses: null // Unlimited uses
+        });
+
+      if (insertError) throw insertError;
+
+      return { code, expiresAt };
+    } catch (error) {
+      console.error('Error generating invite code:', error);
+      return null;
+    }
+  },
+
+  joinWithCode: async (inviteCode: string): Promise<{ success: boolean; groupName?: string; error?: string }> => {
+    if (!supabase) throw new Error("Supabase not configured");
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        return { success: false, error: 'You must be logged in to join a group' };
+      }
+
+      const { data, error } = await supabase.rpc('join_group_with_code', {
+        p_invite_code: inviteCode.toUpperCase(),
+        p_user_id: user.id
+      });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      const result = data as any;
+      return {
+        success: result.success,
+        groupName: result.group_name,
+        error: result.error
+      };
+    } catch (error: any) {
+      return { success: false, error: error.message || 'Failed to join group' };
+    }
+  },
+
+  getActiveInviteCodes: async (familyGroupId: string): Promise<any[]> => {
+    if (!supabase) return [];
+
+    try {
+      const { data, error } = await supabase
+        .from('family_group_invites')
+        .select('*')
+        .eq('family_group_id', familyGroupId)
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching invite codes:', error);
+      return [];
+    }
+  },
+
+  deleteInviteCode: async (inviteId: string): Promise<boolean> => {
+    if (!supabase) return false;
+
+    try {
+      const { error } = await supabase
+        .from('family_group_invites')
+        .delete()
+        .eq('id', inviteId);
+
+      return !error;
+    } catch (error) {
+      console.error('Error deleting invite code:', error);
       return false;
     }
   },

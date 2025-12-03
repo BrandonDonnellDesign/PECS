@@ -241,24 +241,6 @@ const CardEditor: React.FC<CardEditorProps> = ({ card, userId, onSave, onCancel 
                 </div>
               )}
 
-              {mode === 'upload' && !imageUrl && (
-                <div className="text-center z-0">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileUpload}
-                    className="block w-full text-sm text-gray-500 dark:text-gray-400
-                      file:mr-4 file:py-2 file:px-4
-                      file:rounded-full file:border-0
-                      file:text-sm file:font-semibold
-                      file:bg-blue-50 file:text-blue-700
-                      dark:file:bg-blue-900/30 dark:file:text-blue-400
-                      hover:file:bg-blue-100 dark:hover:file:bg-blue-900/50"
-                  />
-                  <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">Supports JPG, PNG</p>
-                </div>
-              )}
-
               {mode === 'camera' && cameraStream && (
                 <div className="absolute inset-0 z-20 bg-black flex flex-col items-center justify-center">
                   <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
