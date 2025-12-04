@@ -4,7 +4,8 @@ export enum AppRoute {
   PRINT = 'print',
   FAMILY = 'family',
   ANALYTICS = 'analytics',
-  SETTINGS = 'settings'
+  SETTINGS = 'settings',
+  AUTH = "AUTH"
 }
 
 export interface PecsCard {

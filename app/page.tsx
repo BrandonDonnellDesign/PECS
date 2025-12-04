@@ -83,7 +83,7 @@ export default function Home() {
     const { createClient } = require('@supabase/supabase-js');
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    
+
     if (supabaseUrl && supabaseKey) {
       const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -156,20 +156,20 @@ export default function Home() {
   };
 
   const handleTemplateSelect = async (template: BoardTemplate | null) => {
-    const newBoard: PecsBoard = template 
+    const newBoard: PecsBoard = template
       ? createBoardFromTemplate(template, user?.id)
       : {
-          id: generateUUID(),
-          userId: user?.id,
-          familyGroupId: selectedFamilyGroup || null,
-          title: "New Board",
-          gridColumns: 4,
-          gridGap: 16,
-          backgroundColor: '#ffffff',
-          cards: [],
-          updatedAt: Date.now()
-        };
-    
+        id: generateUUID(),
+        userId: user?.id,
+        familyGroupId: selectedFamilyGroup || null,
+        title: "New Board",
+        gridColumns: 4,
+        gridGap: 16,
+        backgroundColor: '#ffffff',
+        cards: [],
+        updatedAt: Date.now()
+      };
+
     await storageService.saveBoard(newBoard, user?.id);
     await loadBoards(user?.id);
     setActiveBoardId(newBoard.id);
@@ -329,11 +329,10 @@ export default function Home() {
             {user && route !== AppRoute.PRINT && (
               <button
                 onClick={() => setRoute(route === AppRoute.FAMILY ? AppRoute.HOME : AppRoute.FAMILY)}
-                className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                  route === AppRoute.FAMILY
+                className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${route === AppRoute.FAMILY
                     ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
                     : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30'
-                }`}
+                  }`}
               >
                 <Users className="w-4 h-4" />
                 <span className="hidden sm:inline">Family Groups</span>
@@ -456,7 +455,7 @@ export default function Home() {
                     <div className="text-center py-16 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800/50">
                       <Search className="w-12 h-12 mx-auto mb-3 opacity-20" />
                       <p className="text-lg text-gray-400 dark:text-gray-500">No boards found matching "{searchQuery}"</p>
-                      <button 
+                      <button
                         onClick={() => setSearchQuery('')}
                         className="text-blue-600 dark:text-blue-400 hover:underline mt-2"
                       >
@@ -466,63 +465,75 @@ export default function Home() {
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                       {filteredBoards.map(board => (
-                    <div
-                      key={board.id}
-                      onClick={() => openBoard(board.id)}
-                      className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md hover:border-blue-400 dark:hover:border-blue-500 transition-all cursor-pointer group relative overflow-hidden"
-                    >
-                      <div
-                        className="h-32 rounded-lg mb-4 flex items-center justify-center overflow-hidden border border-gray-100 dark:border-gray-700"
-                        style={{ backgroundColor: board.backgroundColor || '#f9fafb' }}
-                      >
-                        {board.cards.length > 0 ? (
+                        <div
+                          key={board.id}
+                          onClick={() => openBoard(board.id)}
+                          className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md hover:border-blue-400 dark:hover:border-blue-500 transition-all cursor-pointer group relative overflow-hidden"
+                        >
                           <div
-                            className="grid w-20 h-20 opacity-90 gap-[2px]"
-                            style={{ gridTemplateColumns: `repeat(${Math.min(board.gridColumns, 3)}, 1fr)` }}
+                            className="h-32 rounded-lg mb-4 flex items-center justify-center overflow-hidden border border-gray-100 dark:border-gray-700"
+                            style={{ backgroundColor: board.backgroundColor || '#f9fafb' }}
                           >
-                            {board.cards.slice(0, 9).map((c, i) => (
-                              <div key={i} className="bg-white w-full h-full rounded-[2px] border border-gray-100" style={{ backgroundColor: c.backgroundColor }}></div>
-                            ))}
+                            {board.cards.length > 0 ? (
+                              <div
+                                className="grid w-20 h-20 opacity-90 gap-[2px]"
+                                style={{ gridTemplateColumns: `repeat(${Math.min(board.gridColumns, 3)}, 1fr)` }}
+                              >
+                                {board.cards.slice(0, 9).map((c, i) => (
+                                  <div
+                                    key={i}
+                                    className="bg-white w-full h-full rounded-[2px] border border-gray-100 overflow-hidden relative flex items-center justify-center"
+                                    style={{ backgroundColor: c.backgroundColor }}
+                                  >
+                                    {c.imageUrl ? (
+                                      <img src={c.imageUrl} alt={c.label} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <span className="text-[5px] text-gray-800 text-center leading-none px-[1px] truncate w-full font-medium">
+                                        {c.label}
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <LayoutGrid className="w-10 h-10 text-gray-300" />
+                            )}
                           </div>
-                        ) : (
-                          <LayoutGrid className="w-10 h-10 text-gray-300" />
-                        )}
-                      </div>
-                      <h3 className="font-bold text-lg text-gray-800 dark:text-white truncate pr-6">{board.title}</h3>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{board.cards.length} cards • {board.gridColumns} cols</p>
-                        {board.familyGroupId && (
-                          <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
-                            <Users className="w-3 h-3" />
-                            <span>Shared</span>
+                          <h3 className="font-bold text-lg text-gray-800 dark:text-white truncate pr-6">{board.title}</h3>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{board.cards.length} cards • {board.gridColumns} cols</p>
+                            {board.familyGroupId && (
+                              <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
+                                <Users className="w-3 h-3" />
+                                <span>Shared</span>
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
 
-                      <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={(e) => handleExportBoard(e, board)}
-                          className="p-2 bg-white dark:bg-gray-700 rounded-full shadow-sm text-gray-400 dark:text-gray-500 hover:text-green-500 dark:hover:text-green-400 transition-colors transform hover:scale-110"
-                          title="Export Board"
-                        >
-                          <Download className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); duplicateBoard(board); }}
-                          className="p-2 bg-white dark:bg-gray-700 rounded-full shadow-sm text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors transform hover:scale-110"
-                          title="Duplicate Board"
-                        >
-                          <Copy className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={(e) => handleDeleteBoard(e, board.id)}
-                          className="p-2 bg-white dark:bg-gray-700 rounded-full shadow-sm text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors transform hover:scale-110"
-                          title="Delete Board"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
+                          <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(e) => handleExportBoard(e, board)}
+                              className="p-2 bg-white dark:bg-gray-700 rounded-full shadow-sm text-gray-400 dark:text-gray-500 hover:text-green-500 dark:hover:text-green-400 transition-colors transform hover:scale-110"
+                              title="Export Board"
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); duplicateBoard(board); }}
+                              className="p-2 bg-white dark:bg-gray-700 rounded-full shadow-sm text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors transform hover:scale-110"
+                              title="Duplicate Board"
+                            >
+                              <Copy className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => handleDeleteBoard(e, board.id)}
+                              className="p-2 bg-white dark:bg-gray-700 rounded-full shadow-sm text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors transform hover:scale-110"
+                              title="Delete Board"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
                       ))}
                     </div>
                   )}
