@@ -31,19 +31,19 @@ export default function FamilyGroups({ onBoardCreate }: FamilyGroupsProps) {
     try {
       const user = await authService.getUser();
       if (!user) return;
-      
+
       setUserId(user.id);
       const groups = await familyService.getFamilyGroups(user.id);
       setFamilyGroups(groups);
-      
+
       // Load boards for each group
       const allBoards = await storageService.getBoards(user.id, true);
       const boardsByGroup: Record<string, PecsBoard[]> = {};
-      
+
       groups.forEach(group => {
         boardsByGroup[group.id] = allBoards.filter(board => board.familyGroupId === group.id);
       });
-      
+
       setGroupBoards(boardsByGroup);
     } catch (error) {
       console.error('Error loading family groups:', error);
@@ -94,9 +94,7 @@ export default function FamilyGroups({ onBoardCreate }: FamilyGroupsProps) {
       const success = await familyService.deleteFamilyGroup(groupId);
       if (success) {
         await loadFamilyGroups();
-        if (selectedGroup === groupId) {
-          setSelectedGroup(null);
-        }
+
       }
     } catch (error) {
       console.error('Error deleting group:', error);
