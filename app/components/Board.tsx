@@ -2,9 +2,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PecsBoard, PecsCard, FamilyGroup } from '../types';
 import CardEditor from './CardEditor';
-import { Plus, Trash2, Edit2, GripVertical, Settings2, Palette, Users, Share2, Undo2, Redo2, Volume2, Filter, Search, Copy, Check, Clock } from 'lucide-react';
+import { Plus, Trash2, Edit2, GripVertical, Settings2, Palette, Users, Share2, Undo2, Redo2, Volume2, Filter, Search, Copy, Check, Clock, ArrowRight } from 'lucide-react';
 import { storageService, familyService } from '../services/supabase';
 import { BoardHistory, speakText } from '../utils';
+import BoardSelectorModal from './BoardSelectorModal';
 
 interface BoardProps {
   board: PecsBoard;
@@ -28,6 +29,10 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
   const [searchQuery, setSearchQuery] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+
+  // Copy to board state
+  const [copyingCard, setCopyingCard] = useState<PecsCard | null>(null);
+  const [availableBoards, setAvailableBoards] = useState<PecsBoard[]>([]);
 
   // Initialize history when board loads
   useEffect(() => {
@@ -230,7 +235,7 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
 
       // Visual and audio feedback
       setSpeakingCardId(card.id);
-      
+
       // Play custom audio if available, otherwise use TTS
       if (card.audioUrl) {
         const audio = new Audio(card.audioUrl);
@@ -238,7 +243,7 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
       } else {
         speakText(card.label);
       }
-      
+
       // Clear speaking state after a delay
       setTimeout(() => {
         setSpeakingCardId(null);
@@ -251,12 +256,49 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
     onUpdate(updated);
     await storageService.saveBoard(updated, userId);
     setShowShareMenu(false);
-    
+
     if (groupId) {
       const group = familyGroups.find(g => g.id === groupId);
       alert(`Board shared with ${group?.name}!`);
     } else {
       alert('Board is now private (unshared)');
+    }
+  };
+
+  const handleInitiateCopy = async (card: PecsCard) => {
+    setCopyingCard(card);
+    try {
+      const boards = await storageService.getBoards(userId);
+      setAvailableBoards(boards);
+    } catch (error) {
+      console.error("Error fetching boards for copy:", error);
+      // Fallback or empty list logic handled by modal state
+    }
+  };
+
+  const handleCopyToBoard = async (targetBoard: PecsBoard) => {
+    if (!copyingCard) return;
+
+    try {
+      const newCard: PecsCard = {
+        ...copyingCard,
+        id: crypto.randomUUID()
+      };
+
+      const updatedTargetBoard = {
+        ...targetBoard,
+        cards: [...targetBoard.cards, newCard],
+        updatedAt: Date.now()
+      };
+
+      await storageService.saveBoard(updatedTargetBoard, userId);
+      setCopyingCard(null);
+      // Optional: show a toast or notification. Since we don't have toast context here easily without props, a simple alert or nothing is fine.
+      // Ideally we would trigger a toast from parent, but keeping it simple for now as per "allow me to copy..."
+      alert(`Card copied to "${targetBoard.title}"!`);
+    } catch (error) {
+      console.error("Error copying card to board:", error);
+      alert("Failed to copy card to board.");
     }
   };
 
@@ -341,7 +383,7 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
                 >
                   <Share2 className="w-5 h-5" />
                 </button>
-                
+
                 {showShareMenu && (
                   <div className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 p-2">
                     <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 px-2">
@@ -373,7 +415,7 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
                   </div>
                 )}
               </div>
-              
+
               <div className="flex gap-2">
                 <button
                   onClick={handleUndo}
@@ -392,7 +434,7 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
                   <Redo2 className="w-5 h-5" />
                 </button>
               </div>
-              
+
               <button
                 onClick={() => setShowSettings(!showSettings)}
                 className={`p-2 rounded-lg transition-colors ${showSettings ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
@@ -508,22 +550,20 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
             style={{ borderColor: card.backgroundColor }}
           >
             {/* Image Area */}
-            <div 
+            <div
               className="h-[75%] w-full flex items-center justify-center p-2 bg-white cursor-pointer relative group"
               onClick={() => handleCardClick(card)}
             >
               <img src={card.imageUrl} alt={card.label} className="max-h-full max-w-full object-contain pointer-events-none" />
               {/* TTS indicator */}
-              <div className={`absolute inset-0 flex items-center justify-center transition-opacity pointer-events-none ${
-                speakingCardId === card.id 
-                  ? 'opacity-100 bg-blue-500/20' 
-                  : 'opacity-0 group-hover:opacity-100 bg-black/10'
-              }`}>
-                <Volume2 className={`w-8 h-8 drop-shadow-lg transition-all ${
-                  speakingCardId === card.id 
-                    ? 'text-blue-600 scale-110 animate-pulse' 
-                    : 'text-blue-600'
-                }`} />
+              <div className={`absolute inset-0 flex items-center justify-center transition-opacity pointer-events-none ${speakingCardId === card.id
+                ? 'opacity-100 bg-blue-500/20'
+                : 'opacity-0 group-hover:opacity-100 bg-black/10'
+                }`}>
+                <Volume2 className={`w-8 h-8 drop-shadow-lg transition-all ${speakingCardId === card.id
+                  ? 'text-blue-600 scale-110 animate-pulse'
+                  : 'text-blue-600'
+                  }`} />
               </div>
             </div>
 
@@ -542,6 +582,13 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
             {/* Edit Controls */}
             {!readOnly && (
               <div className="absolute top-2 right-2 flex gap-1 opacity-0 hover:opacity-100 transition-opacity bg-white/80 dark:bg-gray-800/80 rounded-lg p-1 shadow-sm backdrop-blur-sm">
+                <button
+                  onClick={() => handleInitiateCopy(card)}
+                  className="p-1.5 hover:bg-purple-100 dark:hover:bg-purple-900/40 rounded text-purple-600 dark:text-purple-400"
+                  title="Copy to another Board"
+                >
+                  <ArrowRight className="w-4 h-4" />
+                </button>
                 <button
                   onClick={() => handleDuplicateCard(card)}
                   className="p-1.5 hover:bg-green-100 dark:hover:bg-green-900/40 rounded text-green-600 dark:text-green-400"
@@ -599,6 +646,15 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
           }}
         />
       )}
+
+      {/* Board Selector Modal */}
+      <BoardSelectorModal
+        isOpen={!!copyingCard}
+        onClose={() => setCopyingCard(null)}
+        onSelect={handleCopyToBoard}
+        boards={availableBoards}
+        currentBoardId={board.id}
+      />
     </div>
   );
 };
