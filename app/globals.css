@@ -1,12 +1,11 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../tailwind.config.ts";
 
 @layer utilities {
   .animate-scale-in {
     animation: scale-in 0.2s ease-out;
   }
-  
+
   .animate-slide-in {
     animation: slide-in 0.3s ease-out;
   }
@@ -26,23 +25,25 @@
   .animate-bounce-in {
     animation: bounce-in 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
   }
-  
+
   @keyframes scale-in {
     from {
       opacity: 0;
       transform: scale(0.95);
     }
+
     to {
       opacity: 1;
       transform: scale(1);
     }
   }
-  
+
   @keyframes slide-in {
     from {
       opacity: 0;
       transform: translateX(100%);
     }
+
     to {
       opacity: 1;
       transform: translateX(0);
@@ -53,9 +54,11 @@
     0% {
       transform: scale(1);
     }
+
     50% {
       transform: scale(0.95);
     }
+
     100% {
       transform: scale(1);
     }
@@ -66,12 +69,15 @@
       opacity: 0;
       transform: scale(0.3);
     }
+
     50% {
       transform: scale(1.05);
     }
+
     70% {
       transform: scale(0.9);
     }
+
     100% {
       opacity: 1;
       transform: scale(1);
@@ -207,14 +213,14 @@ input[type="color"]::-moz-color-swatch {
   }
 
   /* Ensure grid items don't break across pages */
-  .board-grid > div {
+  .board-grid>div {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
     margin-bottom: 0.5cm !important;
   }
 
   /* Ensure card colors print correctly */
-  .board-grid > div {
+  .board-grid>div {
     border-width: 3px !important;
   }
 
@@ -226,7 +232,8 @@ input[type="color"]::-moz-color-swatch {
   }
 
   /* Print title */
-  h1, h2 {
+  h1,
+  h2 {
     page-break-after: avoid !important;
     margin-bottom: 0.5cm !important;
   }
