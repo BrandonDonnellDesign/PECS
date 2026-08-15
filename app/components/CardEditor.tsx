@@ -139,7 +139,7 @@ const CardEditor: React.FC<CardEditorProps> = ({ card, userId, onSave, onCancel 
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-0 sm:p-4 backdrop-blur-sm">
       <div className="bg-white dark:bg-gray-800 rounded-none sm:rounded-xl shadow-2xl w-full max-w-2xl h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto transition-colors duration-300 flex flex-col">
         <div className="flex justify-between items-center p-3 sm:p-6 border-b dark:border-gray-700 shrink-0">
-          <h2 className="text-lg sm:text-2xl font-bold text-gray-800 dark:text-white">{card ? 'Edit Card' : 'New PECS Card'}</h2>
+          <div><p className="section-kicker">Visual communication</p><h2 className="text-lg sm:text-2xl font-bold text-stone-800 dark:text-white">{card ? 'Edit card' : 'New card'}</h2></div>
           <button onClick={onCancel} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full text-gray-500 dark:text-gray-400">
             <X className="w-6 h-6" />
           </button>

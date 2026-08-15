@@ -3,13 +3,13 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "PECS Creator",
-  description: "Create custom Picture Exchange Communication System (PECS) boards.",
+  title: "Pictoboard — Visual Communication Boards",
+  description: "Create personal visual communication and AAC boards with familiar pictures and words.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "PECS Creator"
+    title: "Pictoboard"
   }
 };
 
@@ -18,7 +18,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#2563eb"
+  themeColor: "#27796f"
 };
 
 export default function RootLayout({

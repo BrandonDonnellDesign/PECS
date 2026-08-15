@@ -2,7 +2,7 @@
 
 import { X, Search, LayoutGrid } from 'lucide-react';
 import { PecsBoard } from '../types';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface BoardSelectorModalProps {
     isOpen: boolean;
@@ -20,6 +20,15 @@ export default function BoardSelectorModal({
     currentBoardId
 }: BoardSelectorModalProps) {
     const [searchQuery, setSearchQuery] = useState('');
+    const searchRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        searchRef.current?.focus();
+        const closeOnEscape = (event: KeyboardEvent) => event.key === 'Escape' && onClose();
+        window.addEventListener('keydown', closeOnEscape);
+        return () => window.removeEventListener('keydown', closeOnEscape);
+    }, [isOpen, onClose]);
 
     if (!isOpen) return null;
 
@@ -29,16 +38,17 @@ export default function BoardSelectorModal({
     );
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden animate-scale-in flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/50 backdrop-blur-sm animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="board-selector-title">
+            <div className="bg-[#fffdf9] dark:bg-stone-800 rounded-3xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden animate-scale-in flex flex-col">
                 <div className="flex items-center justify-between p-6 border-b dark:border-gray-700">
                     <div>
-                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Copy Card to Board</h2>
+                        <p className="section-kicker">Reuse a visual</p><h2 id="board-selector-title" className="text-xl font-bold text-stone-900 dark:text-white">Copy card to a board</h2>
                         <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Select a destination board</p>
                     </div>
                     <button
                         onClick={onClose}
-                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                        className="editor-icon-button"
+                        aria-label="Close board picker"
                     >
                         <X className="w-6 h-6" />
                     </button>
@@ -49,10 +59,12 @@ export default function BoardSelectorModal({
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                         <input
                             type="text"
-                            placeholder="Search boards..."
+                            ref={searchRef}
+                            placeholder="Search boards"
+                            aria-label="Search destination boards"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            className="search-input w-full pl-10 pr-4 py-2.5 text-sm"
                         />
                     </div>
                 </div>
@@ -68,7 +80,7 @@ export default function BoardSelectorModal({
                                 <button
                                     key={board.id}
                                     onClick={() => onSelect(board)}
-                                    className="flex items-center gap-4 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-blue-500 dark:hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all text-left bg-white dark:bg-gray-800/50 group"
+                                    className="flex items-center gap-4 p-4 border border-stone-200 dark:border-stone-700 rounded-2xl hover:border-teal-600 hover:bg-teal-50/40 dark:hover:bg-teal-900/20 transition-all text-left bg-white dark:bg-stone-800/50 group"
                                 >
                                     <div
                                         className="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0"

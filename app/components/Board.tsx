@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PecsBoard, PecsCard, FamilyGroup } from '../types';
 import CardEditor from './CardEditor';
-import { Plus, Trash2, Edit2, GripVertical, Settings2, Palette, Users, Share2, Undo2, Redo2, Volume2, Filter, Search, Copy, Check, Clock, ArrowRight } from 'lucide-react';
+import { Plus, Trash2, Edit2, GripVertical, Settings2, Palette, Users, Share2, Undo2, Redo2, Volume2, Search, Copy, Check, Clock, ArrowRight, ArrowUp, ArrowDown, WifiOff, HelpCircle, X, Sparkles } from 'lucide-react';
 import { storageService, familyService } from '../services/supabase';
 import { BoardHistory, speakText } from '../utils';
 import BoardSelectorModal from './BoardSelectorModal';
@@ -29,6 +29,8 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
   const [searchQuery, setSearchQuery] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [saveError, setSaveError] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   // Copy to board state
   const [copyingCard, setCopyingCard] = useState<PecsCard | null>(null);
@@ -38,6 +40,7 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
   useEffect(() => {
     historyRef.current.initialize(board);
     updateHistoryState();
+    if (!readOnly && !localStorage.getItem('pictoboard_editor_intro')) setShowOnboarding(true);
   }, [board.id]);
 
   useEffect(() => {
@@ -123,9 +126,16 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
 
   const saveWithIndicator = async (updatedBoard: PecsBoard) => {
     setIsSaving(true);
-    await storageService.saveBoard(updatedBoard, userId);
-    setLastSaved(new Date());
-    setTimeout(() => setIsSaving(false), 500);
+    setSaveError(false);
+    try {
+      await storageService.saveBoard(updatedBoard, userId);
+      setLastSaved(new Date());
+    } catch (error) {
+      console.error('Unable to save board:', error);
+      setSaveError(true);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleSaveCard = async (newCard: PecsCard) => {
@@ -174,20 +184,21 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
   };
 
   // Simple Drag and Drop implementation
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    setDraggedCardIndex(index);
+  const handleDragStart = (e: React.DragEvent, cardId: string) => {
+    setDraggedCardIndex(board.cards.findIndex(card => card.id === cardId));
     e.dataTransfer.effectAllowed = "move";
   };
 
-  const handleDragOver = (e: React.DragEvent, index: number) => {
+  const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
   };
 
-  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+  const handleDrop = (e: React.DragEvent, cardId: string) => {
     e.preventDefault();
     if (draggedCardIndex === null) return;
 
+    const dropIndex = board.cards.findIndex(card => card.id === cardId);
     const newCards = [...board.cards];
     const [draggedItem] = newCards.splice(draggedCardIndex, 1);
     newCards.splice(dropIndex, 0, draggedItem);
@@ -195,8 +206,25 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
     const updatedBoard = { ...board, cards: newCards, updatedAt: Date.now() };
     saveToHistory(updatedBoard);
     onUpdate(updatedBoard);
-    storageService.saveBoard(updatedBoard, userId);
+    saveWithIndicator(updatedBoard);
     setDraggedCardIndex(null);
+  };
+
+  const moveCard = (cardId: string, direction: -1 | 1) => {
+    const currentIndex = board.cards.findIndex(card => card.id === cardId);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= board.cards.length) return;
+    const cards = [...board.cards];
+    [cards[currentIndex], cards[nextIndex]] = [cards[nextIndex], cards[currentIndex]];
+    const updatedBoard = { ...board, cards, updatedAt: Date.now() };
+    saveToHistory(updatedBoard);
+    onUpdate(updatedBoard);
+    saveWithIndicator(updatedBoard);
+  };
+
+  const dismissOnboarding = () => {
+    localStorage.setItem('pictoboard_editor_intro', 'seen');
+    setShowOnboarding(false);
   };
 
   const updateBoardSettings = (settings: Partial<PecsBoard>) => {
@@ -303,18 +331,19 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
   };
 
   return (
-    <div className="w-full h-full flex flex-col">
+    <div className="editor-workspace w-full h-full flex flex-col pb-20 sm:pb-0">
       {!readOnly && (
-        <div className="mb-6 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border dark:border-gray-700 space-y-4 transition-colors duration-300">
+        <div className="editor-toolbar mb-6 p-4 sm:p-5 space-y-4">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
             <div className="w-full sm:w-auto">
               <input
-                className="w-full sm:w-auto text-2xl font-bold text-gray-800 dark:text-white border-b-2 border-transparent focus:border-blue-500 outline-none bg-transparent"
+                aria-label="Board title"
+                className="w-full sm:w-auto text-2xl sm:text-3xl font-bold tracking-tight text-stone-800 dark:text-white border-b-2 border-transparent focus:border-teal-600 outline-none bg-transparent"
                 value={board.title}
                 onChange={(e) => updateBoardSettings({ title: e.target.value })}
               />
               <div className="flex items-center gap-3 mt-1 flex-wrap">
-                <p className="text-gray-500 dark:text-gray-400 text-sm">{filteredCards.length} / {board.cards.length} Cards</p>
+                <p className="text-stone-500 dark:text-stone-400 text-sm">{filteredCards.length} of {board.cards.length} cards</p>
                 {familyGroupName && (
                   <>
                     <span className="text-gray-300 dark:text-gray-600">•</span>
@@ -324,11 +353,13 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
                     </div>
                   </>
                 )}
-                {lastSaved && (
+                {(lastSaved || isSaving || saveError) && (
                   <>
                     <span className="text-gray-300 dark:text-gray-600">•</span>
                     <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
-                      {isSaving ? (
+                      {saveError ? (
+                        <><WifiOff className="w-3.5 h-3.5 text-red-500" /><span className="text-red-600">Not saved — check connection</span></>
+                      ) : isSaving ? (
                         <>
                           <Clock className="w-3 h-3 animate-spin" />
                           <span>Saving...</span>
@@ -336,7 +367,7 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
                       ) : (
                         <>
                           <Check className="w-3 h-3 text-green-600 dark:text-green-400" />
-                          <span>Saved</span>
+                          <span>Saved {lastSaved?.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
                         </>
                       )}
                     </div>
@@ -351,16 +382,18 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Search cards..."
+                  placeholder="Search cards"
+                  aria-label="Search cards"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="search-input w-full pl-10 pr-4 py-2.5 text-sm"
                 />
               </div>
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="px-4 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                aria-label="Filter cards by category"
+                className="search-input px-4 py-2.5 text-sm"
               >
                 <option value="all">All Categories</option>
                 <option value="noun">Nouns</option>
@@ -374,11 +407,12 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div></div>
 
-            <div className="flex gap-3 w-full sm:w-auto">
+            <div className="flex gap-2 w-full sm:w-auto justify-end">
+              <button onClick={() => setShowOnboarding(true)} className="editor-icon-button" title="Editor help" aria-label="Open editor help"><HelpCircle className="w-5 h-5" /></button>
               <div className="relative share-menu-container">
                 <button
                   onClick={() => setShowShareMenu(!showShareMenu)}
-                  className={`p-2 rounded-lg transition-colors ${showShareMenu ? 'bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                  className={`editor-icon-button ${showShareMenu ? 'is-active' : ''}`}
                   title="Share with family group"
                 >
                   <Share2 className="w-5 h-5" />
@@ -421,7 +455,7 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
                   onClick={handleUndo}
                   disabled={!canUndo}
                   title="Undo (Ctrl+Z)"
-                  className="p-2 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                  className="editor-icon-button disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Undo2 className="w-5 h-5" />
                 </button>
@@ -429,7 +463,7 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
                   onClick={handleRedo}
                   disabled={!canRedo}
                   title="Redo (Ctrl+Y)"
-                  className="p-2 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                  className="editor-icon-button disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Redo2 className="w-5 h-5" />
                 </button>
@@ -437,16 +471,17 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
 
               <button
                 onClick={() => setShowSettings(!showSettings)}
-                className={`p-2 rounded-lg transition-colors ${showSettings ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                className={`editor-icon-button ${showSettings ? 'is-active' : ''}`}
+                aria-label="Board appearance settings"
               >
                 <Settings2 className="w-5 h-5" />
               </button>
               <button
                 onClick={() => setIsCreatorOpen(true)}
-                className="flex-1 sm:flex-none justify-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-medium"
+                className="primary-button flex-1 sm:flex-none !min-h-10 !py-2"
               >
                 <Plus className="w-5 h-5" />
-                Add Card
+                Add card
               </button>
             </div>
           </div>
@@ -455,14 +490,14 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
             <div className="pt-4 border-t dark:border-gray-700 grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                  Grid Columns
+              Grid columns
                 </label>
                 <div className="flex gap-2">
                   {[2, 3, 4, 5, 6, 8].map(cols => (
                     <button
                       key={cols}
                       onClick={() => updateBoardSettings({ gridColumns: cols })}
-                      className={`w-8 h-8 rounded flex items-center justify-center text-sm font-medium transition-colors ${board.gridColumns === cols ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                      className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm font-medium transition-colors ${board.gridColumns === cols ? 'bg-teal-700 text-white' : 'bg-stone-100 dark:bg-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-200'}`}
                     >
                       {cols}
                     </button>
@@ -472,7 +507,7 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
 
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                  Grid Spacing
+              Card spacing
                 </label>
                 <input
                   type="range"
@@ -487,7 +522,7 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
 
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                  <Palette className="w-4 h-4" /> Board Background
+                  <Palette className="w-4 h-4" /> Board background
                 </label>
                 <div className="flex gap-2 flex-wrap items-center">
                   {['#f3f4f6', '#ffffff', '#fff1f2', '#f0f9ff', '#f0fdf4', '#faf5ff', '#1f2937'].map(color => (
@@ -516,7 +551,7 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
                   onClick={() => import('../utils').then(u => u.exportBoard(board))}
                   className="w-full py-2 px-4 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex items-center justify-center gap-2 font-medium"
                 >
-                  <Settings2 className="w-4 h-4" /> Export Board JSON
+                  <Settings2 className="w-4 h-4" /> Export board data
                 </button>
               </div>
             </div>
@@ -534,16 +569,16 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
           padding: readOnly ? '16px' : '0'
         } as React.CSSProperties}
       >
-        {filteredCards.map((card, index) => (
+        {filteredCards.map((card) => (
           <div
             key={card.id}
             draggable={!readOnly}
-            onDragStart={(e) => handleDragStart(e, index)}
-            onDragOver={(e) => handleDragOver(e, index)}
-            onDrop={(e) => handleDrop(e, index)}
+            onDragStart={(e) => handleDragStart(e, card.id)}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, card.id)}
             className={`
               relative aspect-square border-4 rounded-xl overflow-hidden flex flex-col shadow-sm bg-white
-              ${readOnly ? '' : 'cursor-grab active:cursor-grabbing animate-card-hover'}
+              communication-card ${readOnly ? '' : 'cursor-grab active:cursor-grabbing'}
               ${speakingCardId === card.id ? 'animate-card-click' : ''}
               break-inside-avoid animate-bounce-in
             `}
@@ -581,31 +616,33 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
 
             {/* Edit Controls */}
             {!readOnly && (
-              <div className="absolute top-2 right-2 flex gap-1 opacity-0 hover:opacity-100 transition-opacity bg-white/80 dark:bg-gray-800/80 rounded-lg p-1 shadow-sm backdrop-blur-sm">
+              <div className="card-actions absolute top-2 right-2 flex gap-1 bg-white/90 dark:bg-stone-800/90 rounded-lg p-1 shadow-sm backdrop-blur-sm">
+                <button onClick={() => moveCard(card.id, -1)} disabled={board.cards[0]?.id === card.id} className="card-action" title="Move card earlier" aria-label={`Move ${card.label} earlier`}><ArrowUp className="w-4 h-4" /></button>
+                <button onClick={() => moveCard(card.id, 1)} disabled={board.cards[board.cards.length - 1]?.id === card.id} className="card-action" title="Move card later" aria-label={`Move ${card.label} later`}><ArrowDown className="w-4 h-4" /></button>
                 <button
                   onClick={() => handleInitiateCopy(card)}
-                  className="p-1.5 hover:bg-purple-100 dark:hover:bg-purple-900/40 rounded text-purple-600 dark:text-purple-400"
+                  className="card-action"
                   title="Copy to another Board"
                 >
                   <ArrowRight className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => handleDuplicateCard(card)}
-                  className="p-1.5 hover:bg-green-100 dark:hover:bg-green-900/40 rounded text-green-600 dark:text-green-400"
+                  className="card-action"
                   title="Duplicate Card"
                 >
                   <Copy className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => { setEditingCard(card); setIsCreatorOpen(true); }}
-                  className="p-1.5 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded text-blue-600 dark:text-blue-400"
+                  className="card-action"
                   title="Edit Card"
                 >
                   <Edit2 className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => handleDeleteCard(card.id)}
-                  className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/40 rounded text-red-600 dark:text-red-400"
+                  className="card-action hover:!text-red-600"
                   title="Delete Card"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -615,7 +652,7 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
 
             {/* Drag Handle Indicator */}
             {!readOnly && (
-              <div className="absolute top-2 left-2 text-gray-300 opacity-0 hover:opacity-100">
+              <div className="drag-handle absolute top-2 left-2 text-stone-400 bg-white/80 rounded-md p-1" aria-hidden="true">
                 <GripVertical className="w-4 h-4" />
               </div>
             )}
@@ -626,14 +663,40 @@ const Board: React.FC<BoardProps> = ({ board, userId, onUpdate, readOnly = false
         {board.cards.length === 0 && !readOnly && (
           <div
             onClick={() => setIsCreatorOpen(true)}
-            className="aspect-square border-4 border-dashed border-gray-200 dark:border-gray-700 rounded-xl flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+            className="aspect-square border-2 border-dashed border-stone-300 dark:border-stone-700 rounded-2xl flex flex-col items-center justify-center text-stone-500 cursor-pointer hover:border-teal-600 hover:text-teal-700 transition-colors"
             style={{ backgroundColor: 'rgba(255,255,255,0.05)' }}
           >
             <Plus className="w-12 h-12 mb-2" />
-            <span className="font-medium">Add First Card</span>
+            <span className="font-medium">Add your first card</span>
           </div>
         )}
       </div>
+
+      {!readOnly && (
+        <div className="mobile-editor-bar sm:hidden">
+          <button onClick={handleUndo} disabled={!canUndo} aria-label="Undo"><Undo2 className="w-5 h-5" /></button>
+          <button onClick={() => setShowSettings(!showSettings)} aria-label="Board settings"><Settings2 className="w-5 h-5" /></button>
+          <button onClick={() => setIsCreatorOpen(true)} className="mobile-add"><Plus className="w-6 h-6" /><span>Add card</span></button>
+          <button onClick={() => setShowShareMenu(!showShareMenu)} aria-label="Share board"><Share2 className="w-5 h-5" /></button>
+        </div>
+      )}
+
+      {showOnboarding && !readOnly && (
+        <div className="fixed inset-0 z-[60] grid place-items-center p-4 bg-stone-950/45 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="editor-intro-title">
+          <div className="intro-dialog animate-scale-in">
+            <button onClick={dismissOnboarding} className="intro-close" aria-label="Close introduction"><X className="w-5 h-5" /></button>
+            <div className="eyebrow"><Sparkles className="w-4 h-4" /> Quick tour</div>
+            <h2 id="editor-intro-title">Make this board your own</h2>
+            <p>Three simple steps are all it takes to create a useful visual communication board.</p>
+            <ol>
+              <li><span>1</span><div><b>Add familiar pictures</b><small>Choose an emoji, upload a photo, or use your camera.</small></div></li>
+              <li><span>2</span><div><b>Arrange the cards</b><small>Drag cards, or use the arrow controls for keyboard and touch access.</small></div></li>
+              <li><span>3</span><div><b>Use or print</b><small>Tap a card to hear it spoken, or open Print mode for a paper board.</small></div></li>
+            </ol>
+            <button onClick={dismissOnboarding} className="primary-button w-full mt-6">Start creating <ArrowRight className="w-4 h-4" /></button>
+          </div>
+        </div>
+      )}
 
       {(isCreatorOpen || editingCard) && (
         <CardEditor

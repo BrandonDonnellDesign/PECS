@@ -1,6 +1,7 @@
 'use client';
 
 import { AlertTriangle, X } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -23,6 +24,14 @@ export default function ConfirmDialog({
   onCancel,
   variant = 'warning'
 }: ConfirmDialogProps) {
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!isOpen) return;
+    cancelRef.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => event.key === 'Escape' && onCancel();
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [isOpen, onCancel]);
   if (!isOpen) return null;
 
   const variantStyles = {
@@ -32,27 +41,29 @@ export default function ConfirmDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 animate-scale-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/50 backdrop-blur-sm animate-fade-in" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+      <div className="bg-[#fffdf9] dark:bg-stone-800 rounded-3xl shadow-2xl max-w-md w-full p-6 animate-scale-in">
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className={`p-2 rounded-full ${variant === 'danger' ? 'bg-red-100 dark:bg-red-900/30' : variant === 'warning' ? 'bg-yellow-100 dark:bg-yellow-900/30' : 'bg-blue-100 dark:bg-blue-900/30'}`}>
               <AlertTriangle className={`w-5 h-5 ${variant === 'danger' ? 'text-red-600 dark:text-red-400' : variant === 'warning' ? 'text-yellow-600 dark:text-yellow-400' : 'text-blue-600 dark:text-blue-400'}`} />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
+            <h3 id="confirm-title" className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
           </div>
           <button
             onClick={onCancel}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            className="editor-icon-button"
+            aria-label="Close dialog"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
         
-        <p className="text-gray-600 dark:text-gray-300 mb-6">{message}</p>
+        <p id="confirm-message" className="text-gray-600 dark:text-gray-300 mb-6">{message}</p>
         
         <div className="flex gap-3 justify-end">
           <button
+            ref={cancelRef}
             onClick={onCancel}
             className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium"
           >

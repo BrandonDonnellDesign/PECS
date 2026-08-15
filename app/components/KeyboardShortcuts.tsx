@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { X, Keyboard } from 'lucide-react';
 
 interface KeyboardShortcutsProps {
@@ -9,6 +9,12 @@ interface KeyboardShortcutsProps {
 }
 
 export default function KeyboardShortcuts({ isOpen, onClose }: KeyboardShortcutsProps) {
+  useEffect(() => {
+    if (!isOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => event.key === 'Escape' && onClose();
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [isOpen, onClose]);
   if (!isOpen) return null;
 
   const shortcuts = [
@@ -21,21 +27,22 @@ export default function KeyboardShortcuts({ isOpen, onClose }: KeyboardShortcuts
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/50 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
+      <div className="bg-[#fffdf9] dark:bg-stone-800 rounded-3xl shadow-2xl max-w-2xl w-full p-6">
         <div className="flex justify-between items-start mb-6">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
               <Keyboard className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Keyboard Shortcuts</h2>
+              <h2 id="shortcuts-title" className="text-2xl font-bold text-gray-900 dark:text-white">Keyboard shortcuts</h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">Work faster with these shortcuts</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            className="editor-icon-button"
+            aria-label="Close keyboard shortcuts"
           >
             <X className="w-6 h-6" />
           </button>
@@ -76,7 +83,7 @@ export default function KeyboardShortcuts({ isOpen, onClose }: KeyboardShortcuts
         <div className="mt-6 flex justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="primary-button !min-h-10 !py-2"
           >
             Got it!
           </button>

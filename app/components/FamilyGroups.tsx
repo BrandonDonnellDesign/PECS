@@ -145,48 +145,45 @@ export default function FamilyGroups({ onBoardCreate }: FamilyGroupsProps) {
   };
 
   if (loading) {
-    return <div className="p-4">Loading family groups...</div>;
+    return <div className="p-12 text-center text-stone-500">Loading groups…</div>;
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold flex items-center gap-2">
-          <Users className="w-6 h-6" />
-          Family Groups
-        </h2>
+    <div className="max-w-6xl mx-auto">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-8">
+        <div><p className="section-kicker">Shared care</p><h2 className="text-3xl font-bold tracking-tight flex items-center gap-2"><Users className="w-7 h-7 text-teal-700" />Family groups</h2><p className="text-stone-500 mt-1">Keep communication boards consistent across home, school, and care teams.</p></div>
         <div className="flex gap-3">
           <button
             onClick={() => setShowJoinModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+            className="secondary-button !min-h-10 !py-2"
           >
             <LogIn className="w-4 h-4" />
-            Join Group
+            Join group
           </button>
           <button
             onClick={() => setShowCreateForm(!showCreateForm)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+            className="primary-button !min-h-10 !py-2"
           >
             <Plus className="w-4 h-4" />
-            Create Group
+            Create group
           </button>
         </div>
       </div>
 
       {showCreateForm && (
-        <form onSubmit={handleCreateGroup} className="mb-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+        <form onSubmit={handleCreateGroup} className="editor-toolbar mb-6 p-5">
           <input
             type="text"
             value={newGroupName}
             onChange={(e) => setNewGroupName(e.target.value)}
             placeholder="Family group name"
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg mb-3 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="search-input w-full px-4 py-3 mb-3"
             required
           />
           <div className="flex gap-2">
             <button
               type="submit"
-              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 font-medium"
+              className="primary-button !min-h-10 !py-2"
             >
               Create
             </button>
@@ -203,7 +200,7 @@ export default function FamilyGroups({ onBoardCreate }: FamilyGroupsProps) {
 
       <div className="grid md:grid-cols-2 gap-6">
         {familyGroups.map((group) => (
-          <div key={group.id} className="border rounded-lg p-4 bg-white dark:bg-gray-900">
+          <div key={group.id} className="board-tile !p-5">
             <div className="flex justify-between items-start mb-4">
               <h3 className="text-xl font-semibold">{group.name}</h3>
               {canManageGroup(group) && (
@@ -246,11 +243,11 @@ export default function FamilyGroups({ onBoardCreate }: FamilyGroupsProps) {
                 <h4 className="font-medium text-sm text-gray-600 dark:text-gray-400">Shared Boards</h4>
                 <button
                   onClick={() => onBoardCreate?.(group.id)}
-                  className="flex items-center gap-1 text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                  className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-teal-700 text-white rounded-lg hover:bg-teal-800"
                   title="Create board for this group"
                 >
                   <Plus className="w-3 h-3" />
-                  New Board
+                  New board
                 </button>
               </div>
               {groupBoards[group.id]?.length > 0 ? (
@@ -275,7 +272,7 @@ export default function FamilyGroups({ onBoardCreate }: FamilyGroupsProps) {
                   className="flex items-center gap-2 text-sm text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 font-medium"
                 >
                   <Key className="w-4 h-4" />
-                  Generate Invite Code
+                  Create invite code
                 </button>
               </div>
             )}
@@ -284,9 +281,9 @@ export default function FamilyGroups({ onBoardCreate }: FamilyGroupsProps) {
       </div>
 
       {familyGroups.length === 0 && (
-        <div className="text-center py-12 text-gray-500">
-          <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>No family groups yet. Create one to start sharing boards!</p>
+        <div className="empty-state">
+          <span className="empty-icon"><Users className="w-7 h-7" /></span>
+          <h3>No groups yet</h3><p>Create a private group to share boards with family members, teachers, or caregivers.</p>
         </div>
       )}
 

@@ -38,7 +38,7 @@ export const authService = {
     try {
       const { data: existingProfile } = await supabase
         .from('profiles')
-        .select('id')
+        .select('id, email')
         .eq('id', userId)
         .single();
 
@@ -52,6 +52,12 @@ export const authService = {
               email: userData.user.email,
               display_name: userData.user.user_metadata?.display_name || userData.user.email?.split('@')[0]
             });
+        }
+      } else {
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData.user?.email && existingProfile.email !== userData.user.email) {
+          const { error } = await supabase.from('profiles').update({ email: userData.user.email }).eq('id', userId);
+          if (error) console.error('Error synchronizing profile email:', error);
         }
       }
     } catch (error) {
@@ -80,10 +86,39 @@ export const authService = {
 
   updateProfile: async (userId: string, displayName: string): Promise<void> => {
     if (!supabase) throw new Error("Supabase not configured");
-    await supabase
+    const { error } = await supabase
       .from('profiles')
       .update({ display_name: displayName })
       .eq('id', userId);
+    if (error) throw error;
+  },
+
+  updateDisplayName: async (userId: string, displayName: string): Promise<User> => {
+    if (!supabase) throw new Error("Supabase not configured");
+    const cleanName = displayName.trim();
+    if (!cleanName) throw new Error('Display name is required');
+
+    const { data, error } = await supabase.auth.updateUser({
+      data: { display_name: cleanName }
+    });
+    if (error) throw error;
+    await authService.updateProfile(userId, cleanName);
+    return data.user;
+  },
+
+  updateEmail: async (email: string): Promise<User> => {
+    if (!supabase) throw new Error("Supabase not configured");
+    const { data, error } = await supabase.auth.updateUser({ email: email.trim() });
+    if (error) throw error;
+    return data.user;
+  },
+
+  updatePassword: async (password: string): Promise<User> => {
+    if (!supabase) throw new Error("Supabase not configured");
+    if (password.length < 8) throw new Error('Password must be at least 8 characters');
+    const { data, error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+    return data.user;
   },
 
   signIn: async (email: string, password: string) => {

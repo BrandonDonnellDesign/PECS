@@ -13,9 +13,10 @@ import TemplateModal from './components/TemplateModal';
 import { createBoardFromTemplate, BoardTemplate } from './templates';
 import { authService, storageService } from './services/supabase';
 import { generateUUID, exportBoard, importBoard, initializeTTS } from './utils';
-import { LayoutGrid, Printer, Plus, Home as HomeIcon, Sparkles, LogOut, User as UserIcon, Loader2, Trash2, ArrowLeft, Upload, Users, RefreshCw, Search, Copy, Download, FileUp } from 'lucide-react';
+import { LayoutGrid, Printer, Plus, Sparkles, LogOut, User as UserIcon, Loader2, Trash2, ArrowLeft, Users, RefreshCw, Search, Copy, Download, FileUp, ArrowUpRight, Clock3, MoreHorizontal } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 import KeyboardShortcuts from './components/KeyboardShortcuts';
+import AccountSettings from './components/AccountSettings';
 
 export default function Home() {
   const [route, setRoute] = useState<AppRoute>(AppRoute.HOME);
@@ -29,6 +30,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showAccountSettings, setShowAccountSettings] = useState(false);
 
   useEffect(() => {
     checkUser();
@@ -301,19 +303,19 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans transition-colors duration-300">
+    <div className="app-shell min-h-screen flex flex-col text-stone-900 dark:text-stone-100 font-sans transition-colors duration-300">
       {/* Navbar */}
-      <header className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 shadow-sm sticky top-0 z-40 no-print transition-colors duration-300">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      <header className="app-header sticky top-0 z-40 no-print">
+        <div className="max-w-7xl mx-auto px-5 lg:px-8 h-[72px] flex items-center justify-between">
           <div
-            className="flex items-center gap-2 font-bold text-xl text-blue-600 dark:text-blue-400 cursor-pointer"
+            className="flex items-center gap-3 font-bold text-xl text-stone-900 dark:text-white cursor-pointer group"
             onClick={() => setRoute(AppRoute.HOME)}
           >
-            <LayoutGrid className="w-6 h-6" />
-            <span className="hidden sm:inline">PECS Creator</span>
+            <span className="brand-mark"><LayoutGrid className="w-5 h-5" /></span>
+            <span className="hidden sm:inline tracking-[-0.03em]">Picto<span className="text-teal-700 dark:text-teal-400">board</span></span>
           </div>
 
-          <div className="flex gap-4 items-center">
+          <div className="flex gap-2 sm:gap-3 items-center">
             <ThemeToggle />
 
             {route === AppRoute.EDITOR && activeBoard && (
@@ -339,11 +341,15 @@ export default function Home() {
               </button>
             )}
 
-            <div className="w-px h-6 bg-gray-200 dark:bg-gray-700"></div>
+            <div className="w-px h-6 bg-stone-200 dark:bg-stone-700"></div>
 
             {user ? (
               <div className="flex items-center gap-4">
-                <span className="text-sm text-gray-600 dark:text-gray-300 hidden sm:inline">{user.email}</span>
+                <button onClick={() => setShowAccountSettings(true)} className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors" title="Account settings">
+                  <span className="w-7 h-7 grid place-items-center rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 font-bold">{(user.user_metadata?.display_name || user.email || 'U').charAt(0).toUpperCase()}</span>
+                  <span className="max-w-36 truncate">{user.user_metadata?.display_name || user.email}</span>
+                </button>
+                <button onClick={() => setShowAccountSettings(true)} className="sm:hidden editor-icon-button" aria-label="Account settings"><UserIcon className="w-5 h-5" /></button>
                 <button
                   onClick={handleLogout}
                   className="p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
@@ -355,7 +361,7 @@ export default function Home() {
             ) : (
               <button
                 onClick={() => setRoute(AppRoute.AUTH)}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg text-sm hover:bg-black dark:hover:bg-gray-100 transition-colors"
+                className="primary-button !px-4 !py-2 text-sm"
               >
                 <UserIcon className="w-4 h-4" /> Log In
               </button>
@@ -365,7 +371,7 @@ export default function Home() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 max-w-6xl mx-auto w-full p-6 no-print">
+      <main className="flex-1 max-w-7xl mx-auto w-full px-5 py-7 lg:px-8 lg:py-10 no-print">
 
         {route === AppRoute.AUTH && (
           <div className="py-12 animate-fade-in">
@@ -377,39 +383,46 @@ export default function Home() {
         )}
 
         {route === AppRoute.HOME && (
-          <div className="space-y-8 animate-fade-in">
-            <div className="text-center py-12 px-6 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl shadow-xl text-white relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-full opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
-              <div className="relative z-10">
-                <h1 className="text-4xl md:text-5xl font-extrabold mb-6 tracking-tight">Create Custom PECS Boards</h1>
-                <p className="text-lg md:text-xl opacity-90 max-w-2xl mx-auto mb-8 font-light">
-                  Design accessible communication tools instantly. Use your own photos or our camera tool. Now with customizable layouts and cloud saving.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="space-y-12 animate-fade-in">
+            <section className="hero-panel">
+              <div className="hero-copy">
+                <div className="eyebrow"><Sparkles className="w-3.5 h-3.5" /> Communication made visual</div>
+                <h1>Build a voice,<br /><span>one picture at a time.</span></h1>
+                <p>Create clear, personal communication boards with familiar photos, simple symbols, and words that matter.</p>
+                <div className="flex flex-col sm:flex-row gap-3">
                   <button
                     onClick={() => createNewBoard()}
-                    className="bg-white text-blue-600 px-8 py-3 rounded-full font-bold text-lg hover:bg-blue-50 transition-all hover:scale-105 shadow-lg flex items-center gap-2"
+                    className="primary-button"
                   >
                     <Plus className="w-5 h-5" />
-                    Create New Board
+                    Create a board
                   </button>
                   <button
                     onClick={handleImportBoard}
-                    className="bg-blue-800/30 text-white px-8 py-3 rounded-full font-bold text-lg hover:bg-blue-800/50 transition-all hover:scale-105 shadow-lg flex items-center gap-2 backdrop-blur-sm border border-white/20"
+                    className="secondary-button"
                   >
                     <FileUp className="w-5 h-5" />
-                    Import Board
+                    Import board
                   </button>
                 </div>
+                <div className="hero-note"><span className="hero-avatars">😊 📷</span> Use emojis, your own photos, or your camera</div>
               </div>
-            </div>
+              <div className="hero-visual" aria-hidden="true">
+                <div className="sample-board">
+                  <div className="sample-board-top"><span>My morning</span><MoreHorizontal className="w-5 h-5" /></div>
+                  <div className="sample-grid">
+                    {[['☀️','Wake up','#f8d7a3'],['🪥','Brush teeth','#b9dcd5'],['👕','Get dressed','#d8c8e7'],['🥣','Breakfast','#f4c5b8'],['🎒','Pack bag','#b9cdec'],['🚌','Go to school','#f3dfa2']].map(([emoji,label,color]) => (
+                      <div className="sample-card" key={label} style={{'--card-color': color} as React.CSSProperties}><span>{emoji}</span><b>{label}</b></div>
+                    ))}
+                  </div>
+                </div>
+                <div className="floating-badge"><span>✓</span><div><b>Ready to use</b><small>Print or use on screen</small></div></div>
+              </div>
+            </section>
 
-            <div>
+            <section>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                <h2 className="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                  <HomeIcon className="w-6 h-6 text-blue-500" />
-                  {user ? 'Your Saved Boards' : 'Local Boards'}
-                </h2>
+                <div><p className="section-kicker">Your workspace</p><h2 className="text-3xl font-bold tracking-tight text-stone-900 dark:text-white">{user ? 'Saved boards' : 'Your boards'}</h2></div>
                 <div className="flex items-center gap-3">
                   {boards.length > 0 && (
                     <div className="relative flex-1 sm:flex-none">
@@ -417,10 +430,10 @@ export default function Home() {
                       <input
                         id="board-search"
                         type="text"
-                        placeholder="Search boards... (Ctrl+K)"
+                        placeholder="Search your boards"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-10 pr-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-64"
+                        className="search-input pl-10 pr-4 py-2.5 text-sm w-full sm:w-64"
                       />
                     </div>
                   )}
@@ -444,10 +457,11 @@ export default function Home() {
                   <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">This may take a moment</p>
                 </div>
               ) : boards.length === 0 ? (
-                <div className="text-center py-16 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800/50 text-gray-400 dark:text-gray-500">
-                  <LayoutGrid className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                  <p className="text-lg">No boards yet.</p>
-                  <button onClick={() => createNewBoard()} className="text-blue-600 dark:text-blue-400 hover:underline mt-2">Start creating now</button>
+                <div className="empty-state">
+                  <span className="empty-icon"><LayoutGrid className="w-7 h-7" /></span>
+                  <h3>Your first board starts here</h3>
+                  <p>Choose a template or begin with a blank canvas. You can change everything later.</p>
+                  <button onClick={() => createNewBoard()} className="primary-button mt-5"><Plus className="w-4 h-4" /> Create a board</button>
                 </div>
               ) : (
                 <>
@@ -463,20 +477,20 @@ export default function Home() {
                       </button>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                       {filteredBoards.map(board => (
                         <div
                           key={board.id}
                           onClick={() => openBoard(board.id)}
-                          className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md hover:border-blue-400 dark:hover:border-blue-500 transition-all cursor-pointer group relative overflow-hidden"
+                          className="board-tile group"
                         >
                           <div
-                            className="h-32 rounded-lg mb-4 flex items-center justify-center overflow-hidden border border-gray-100 dark:border-gray-700"
+                            className="board-preview"
                             style={{ backgroundColor: board.backgroundColor || '#f9fafb' }}
                           >
                             {board.cards.length > 0 ? (
                               <div
-                                className="grid w-20 h-20 opacity-90 gap-[2px]"
+                                className="grid w-28 h-28 opacity-95 gap-1"
                                 style={{ gridTemplateColumns: `repeat(${Math.min(board.gridColumns, 3)}, 1fr)` }}
                               >
                                 {board.cards.slice(0, 9).map((c, i) => (
@@ -499,9 +513,9 @@ export default function Home() {
                               <LayoutGrid className="w-10 h-10 text-gray-300" />
                             )}
                           </div>
-                          <h3 className="font-bold text-lg text-gray-800 dark:text-white truncate pr-6">{board.title}</h3>
+                          <div className="flex items-start justify-between gap-3"><h3 className="font-bold text-lg text-stone-900 dark:text-white truncate">{board.title}</h3><ArrowUpRight className="w-5 h-5 text-stone-400 group-hover:text-teal-700 transition-colors" /></div>
                           <div className="flex items-center gap-2">
-                            <p className="text-sm text-gray-500 dark:text-gray-400">{board.cards.length} cards • {board.gridColumns} cols</p>
+                            <p className="text-sm text-stone-500 dark:text-stone-400 flex items-center gap-1.5"><Clock3 className="w-3.5 h-3.5" /> Edited {new Date(board.updatedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })} · {board.cards.length} cards</p>
                             {board.familyGroupId && (
                               <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
                                 <Users className="w-3 h-3" />
@@ -539,7 +553,7 @@ export default function Home() {
                   )}
                 </>
               )}
-            </div>
+            </section>
           </div>
         )}
 
@@ -589,13 +603,20 @@ export default function Home() {
         onClose={() => setShowShortcuts(false)}
       />
 
+      {user && (
+        <AccountSettings
+          isOpen={showAccountSettings}
+          user={user}
+          onClose={() => setShowAccountSettings(false)}
+          onUserUpdated={setUser}
+        />
+      )}
+
       {/* Footer */}
-      <footer className="border-t dark:border-gray-700 bg-white dark:bg-gray-800 py-8 mt-12 no-print transition-colors duration-300">
-        <div className="max-w-6xl mx-auto px-4 text-center text-sm text-gray-500 dark:text-gray-400 flex flex-col items-center gap-3">
-          <div className="flex items-center gap-1 font-medium text-gray-700 dark:text-gray-300">
-            Powered by <Sparkles className="w-4 h-4 text-purple-500" /> PECS Creator
-          </div>
-          <p>Designed to assist in creating AAC materials for everyone.</p>
+      <footer className="app-footer no-print">
+        <div className="max-w-7xl mx-auto px-5 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2 font-semibold"><span className="brand-mark !w-8 !h-8"><LayoutGrid className="w-4 h-4" /></span> Pictoboard</div>
+          <p>Thoughtfully made for visual communicators and the people who support them.</p>
         </div>
       </footer>
 

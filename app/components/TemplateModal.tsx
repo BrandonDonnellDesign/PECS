@@ -1,6 +1,7 @@
 'use client';
 
 import { X } from 'lucide-react';
+import { useEffect } from 'react';
 import { BOARD_TEMPLATES, BoardTemplate } from '../templates';
 
 interface TemplateModalProps {
@@ -10,19 +11,27 @@ interface TemplateModalProps {
 }
 
 export default function TemplateModal({ isOpen, onClose, onSelectTemplate }: TemplateModalProps) {
+  useEffect(() => {
+    if (!isOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => event.key === 'Escape' && onClose();
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [isOpen, onClose]);
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden animate-scale-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/50 backdrop-blur-sm animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="template-title">
+      <div className="bg-[#fffdf9] dark:bg-stone-800 rounded-3xl shadow-2xl max-w-4xl w-full max-h-[85vh] overflow-hidden animate-scale-in">
         <div className="flex items-center justify-between p-6 border-b dark:border-gray-700">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Choose a Template</h2>
+            <p className="section-kicker">A helpful head start</p>
+            <h2 id="template-title" className="text-2xl font-bold text-stone-900 dark:text-white">Choose a template</h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Start with a pre-made board or create from scratch</p>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            className="editor-icon-button"
+            aria-label="Close template picker"
           >
             <X className="w-6 h-6" />
           </button>
@@ -33,7 +42,7 @@ export default function TemplateModal({ isOpen, onClose, onSelectTemplate }: Tem
             {/* Blank Board Option */}
             <button
               onClick={() => onSelectTemplate(null as any)}
-              className="p-6 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl hover:border-blue-500 dark:hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all text-left group"
+              className="p-6 border-2 border-dashed border-stone-300 dark:border-stone-600 rounded-2xl hover:border-teal-600 hover:bg-teal-50/50 dark:hover:bg-teal-900/20 transition-all text-left group"
             >
               <div className="text-4xl mb-3">➕</div>
               <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-2">Blank Board</h3>
@@ -45,7 +54,7 @@ export default function TemplateModal({ isOpen, onClose, onSelectTemplate }: Tem
               <button
                 key={template.id}
                 onClick={() => onSelectTemplate(template)}
-                className="p-6 border-2 border-gray-200 dark:border-gray-700 rounded-xl hover:border-blue-500 dark:hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all text-left group"
+                className="p-6 border border-stone-200 dark:border-stone-700 rounded-2xl hover:border-teal-600 hover:-translate-y-1 hover:shadow-lg transition-all text-left group"
               >
                 <div className="text-4xl mb-3">{template.icon}</div>
                 <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-2">{template.name}</h3>
